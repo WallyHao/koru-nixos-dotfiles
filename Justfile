@@ -114,3 +114,11 @@ home-module-disable name:
 # Validate switchboard syntax, inventory, dependencies and selected evaluation.
 home-modules-validate:
     ./scripts/home-modules validate
+
+# Show one on-demand Field Notes power snapshot.
+field-notes:
+    field-notes show
+
+# Record a labeled Field Notes baseline in private local state.
+field-notes-record label:
+    field-notes record {{quote(label)}}

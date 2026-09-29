@@ -23,6 +23,7 @@
     fastfetch = true;
     fcitx5 = true;
     fd = true;
+    field-notes = true;
     fzf = true;
     gh = true;
     git = true;
