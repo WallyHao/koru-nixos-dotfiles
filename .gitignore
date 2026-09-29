@@ -1,0 +1,17 @@
+# Nix build results
+/result
+/result-*
+
+# home-manager backups of pre-existing files
+*.hm-bak
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Secrets (Vault/env files). The live file is ~/.config/zsh/secrets.env, outside
+# this repo; this pattern prevents an accidental copy from being committed.
+secrets.env
+*.secret
+*.secrets

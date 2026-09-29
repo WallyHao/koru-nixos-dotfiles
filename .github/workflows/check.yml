@@ -1,0 +1,32 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  flake-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # Runs the nixfmt/statix/deadnix checks and evaluates
+      # nixosConfigurations.koru, which embeds home-manager for that host.
+      # It does NOT evaluate homeConfigurations.
+      - run: nix flake check --print-build-logs
+
+      # Force evaluation of the standalone user profile (whose pkgs instance is
+      # built separately) and of every home module, including ones no host
+      # currently imports, so a rotted config fails CI instead of surprising us
+      # the day it is re-enabled.
+      - run: |
+          nix eval --raw .#homeConfigurations.koru.activationPackage.drvPath
+          nix eval --raw .#homeConfigurations.all.activationPackage.drvPath
