@@ -1,0 +1,64 @@
+#compdef proxyctl
+
+_proxyctl_nodes() {
+  local cache=${PROXYCTL_NODES_FILE:-$HOME/.config/mihomo/nodes.json}
+  local name description
+  local -a names descriptions
+  if [[ -r $cache ]] && (( $+commands[jq] )); then
+    while IFS= read -r -d $'\0' name && IFS= read -r -d $'\0' description; do
+      names+=("$name")
+      descriptions+=("$description")
+    done < <(jq -j '.[] | .name, "\u0000", ((.latency_ms | tostring) + " ms cached"), "\u0000"' -- "$cache" 2>/dev/null)
+    _wanted nodes expl 'cached proxy node' compadd -Q -d descriptions -- "${names[@]}"
+  else
+    _message 'no local node cache; run proxyctl refresh'
+  fi
+}
+
+_proxyctl() {
+  local context state line
+  typeset -A opt_args
+  local -a commands
+  commands=(
+    'start:start the proxy using a cached node'
+    'status:show local service, controller and cache state'
+    'shutdown:stop the proxy and TUN interface'
+    'refresh:fetch, parse and probe the subscription'
+    'nodes:list locally cached usable nodes'
+    'help:show command help'
+  )
+
+  _arguments -C \
+    '(- 1 *)'{-h,--help}'[show help]' \
+    '--color=[color policy]:policy:(auto always never)' \
+    '1:command:->command' \
+    '*::argument:->arguments'
+
+  case $state in
+    command)
+      _describe -t commands command commands
+      ;;
+    arguments)
+      case $line[1] in
+        start)
+          _arguments '--node=[use an exact cached node name]:node:_proxyctl_nodes'
+          ;;
+        status)
+          _arguments \
+            '--json[emit parseable JSON]' \
+            '--latency[probe current-node HTTP latency]' \
+            '--traffic[sample existing proxy traffic]' \
+            '--speed-test[run a bounded download goodput test]'
+          ;;
+        refresh)
+          _arguments '--restore[restore the prior service and node after refresh]'
+          ;;
+        shutdown|nodes|help)
+          _arguments
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_proxyctl "$@"
