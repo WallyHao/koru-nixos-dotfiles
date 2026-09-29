@@ -50,6 +50,14 @@ in
     patch:
       __include: rime_ice_suggestion:/
       menu/page_size: 7
+      ascii_composer/switch_key/Shift_L: commit_code
+      ascii_composer/switch_key/Shift_R: commit_code
+  '';
+
+  # Framework-level input-method switching (normally Ctrl+Space) commits the
+  # raw Latin composition instead of the previewed Chinese candidate.
+  xdg.configFile."fcitx5/conf/rime.conf".text = ''
+    SwitchInputMethodBehavior=CommitRawInput
   '';
 
   xdg.configFile."fcitx5/conf/classicui.conf".text = ''
