@@ -129,12 +129,9 @@ in
       l = "eza --tree --group-directories-first -L 1";
       ls = "eza --tree --group-directories-first --long -L 1";
       la = "eza -la --tree --group-directories-first -L 1";
-      # Full system rebuild (system layer + embedded home-manager).
-      nixos-system-rebuild = "sudo nixos-rebuild switch --flake ~/.config/nixos#koru";
-      # User config only, via the standalone home-manager output
-      # (flake.nix: homeConfigurations.koru): no sudo, no new system
-      # generation. Can only touch things that live in the user profile.
-      nixos-homemanager-update = "home-manager switch --flake ~/.config/nixos#koru";
+      # Compatibility aliases delegate to the documented repository recipes.
+      nixos-system-rebuild = "just --justfile ~/.config/nixos/Justfile system-configuration-switch";
+      nixos-homemanager-update = "just --justfile ~/.config/nixos/Justfile home-configuration-switch";
     };
 
     # Quality-of-life shell options (applied after oh-my-zsh, so they win).
@@ -173,10 +170,9 @@ in
       ${p10kOverrideLines}
       (( ! $+functions[p10k] )) || p10k reload
 
-      # Rebuild helpers: the only sanctioned way to change the system, so no
-      # imperative `nix profile` wrappers live here.
-      nosr() { sudo nixos-rebuild switch --flake ~/.config/nixos#koru "$@"; }
-      nohm() { home-manager switch --flake ~/.config/nixos#koru; }
+      # Rebuild helpers delegate to the same recipes as the long aliases.
+      nosr() { just --justfile ~/.config/nixos/Justfile system-configuration-switch "$@"; }
+      nohm() { just --justfile ~/.config/nixos/Justfile home-configuration-switch "$@"; }
 
       # Convert a doc/ppt (docx/pptx/odt/odp/...) to PDF with headless
       # LibreOffice (installed by home/libreoffice.nix).

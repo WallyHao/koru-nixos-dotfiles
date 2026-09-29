@@ -185,6 +185,17 @@
         {
           formatter = pkgs.nixfmt;
 
+          devShells.default = pkgs.mkShellNoCC {
+            packages = with pkgs; [
+              deadnix
+              jq
+              just
+              nixfmt
+              shellcheck
+              statix
+            ];
+          };
+
           checks = {
             formatting =
               pkgs.runCommand "check-formatting"
