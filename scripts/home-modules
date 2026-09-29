@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository_root=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+selection_file=$repository_root/home/module-selection.nix
+
+die() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 2
+}
+
+cleanup_paths=()
+cleanup() {
+  local path
+  for path in "${cleanup_paths[@]}"; do
+    [[ -e $path ]] && rm -rf -- "$path"
+  done
+}
+trap cleanup EXIT
+
+parse_selection() {
+  local file=$1
+  gawk '
+    function trimmed(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      return value
+    }
+    function fail(message) {
+      printf "%s:%d: %s\n", FILENAME, NR, message > "/dev/stderr"
+      failed = 1
+    }
+    {
+      raw = $0
+      line = trimmed(raw)
+      if (line == "" || line ~ /^#/) next
+      if (state == 0 && line == "{") { state = 1; next }
+      if (state == 1 && line == "enable = {") { state = 2; next }
+      if (state == 2 && line == "};") { state = 3; next }
+      if (state == 3 && line == "}") { state = 4; next }
+      if (state == 2 && match(line, /^[-A-Za-z0-9]+[[:space:]]*=[[:space:]]*(true|false);([[:space:]]*#.*)?$/)) {
+        name = line
+        sub(/[[:space:]]*=.*/, "", name)
+        value = line
+        sub(/^.*=[[:space:]]*/, "", value)
+        sub(/;.*$/, "", value)
+        if (seen[name]++) fail("duplicate assignment for " name)
+        print name "\t" value
+        next
+      }
+      fail("unsupported or ambiguous switchboard syntax")
+    }
+    END {
+      if (state != 4) fail("incomplete switchboard structure")
+      if (failed) exit 1
+    }
+  ' "$file"
+}
+
+module_inventory() {
+  find "$repository_root/home" -maxdepth 1 -type f -name '*.nix' -printf '%f\n' |
+    sed 's/\.nix$//' |
+    grep -Ev '^(default|module-selection)$' |
+    LC_ALL=C sort
+}
+
+validate_inventory() {
+  local parsed=$1
+  local parsed_names inventory_names
+  parsed_names=$(cut -f1 "$parsed" | LC_ALL=C sort)
+  inventory_names=$(module_inventory)
+  if [[ $parsed_names != "$inventory_names" ]]; then
+    printf '%s\n' 'Switchboard and module inventory differ:' >&2
+    diff -u <(printf '%s\n' "$inventory_names") <(printf '%s\n' "$parsed_names") >&2 || true
+    return 1
+  fi
+}
+
+make_parsed_file() {
+  local source=$1 destination=$2
+  parse_selection "$source" > "$destination"
+  validate_inventory "$destination"
+}
+
+format_candidate() {
+  local candidate=$1
+  nix develop --no-update-lock-file --command nixfmt "$candidate" >/dev/null
+}
+
+evaluate_candidate() {
+  local candidate=$1
+  local source_copy
+  source_copy=$(mktemp -d "${TMPDIR:-/tmp}/koru-home-modules.XXXXXXXX")
+  cleanup_paths+=("$source_copy")
+  cp -a -- "$repository_root/." "$source_copy/repository"
+  cp -- "$candidate" "$source_copy/repository/home/module-selection.nix"
+  nix eval --no-update-lock-file --raw \
+    "path:$source_copy/repository#homeConfigurations.koru.activationPackage.drvPath" >/dev/null
+}
+
+validate_file() {
+  local candidate=$1 parsed
+  parsed=$(mktemp "${TMPDIR:-/tmp}/koru-home-modules-parsed.XXXXXXXX")
+  cleanup_paths+=("$parsed")
+  make_parsed_file "$candidate" "$parsed"
+  evaluate_candidate "$candidate"
+}
+
+list_modules() {
+  local parsed
+  parsed=$(mktemp "${TMPDIR:-/tmp}/koru-home-modules-list.XXXXXXXX")
+  cleanup_paths+=("$parsed")
+  make_parsed_file "$selection_file" "$parsed"
+  awk -F '\t' '{ printf "%-24s %s\n", $1, $2 }' "$parsed"
+}
+
+edit_module() {
+  local name=$1 desired=$2
+  local lock_file=$repository_root/.git/home-modules.lock
+  [[ -d $repository_root/.git ]] || lock_file=$repository_root/.home-modules.lock
+  exec 9>"$lock_file"
+  flock 9
+
+  local original_hash parsed current candidate candidate_parsed
+  original_hash=$(sha256sum "$selection_file" | cut -d ' ' -f1)
+  parsed=$(mktemp "${TMPDIR:-/tmp}/koru-home-modules-current.XXXXXXXX")
+  cleanup_paths+=("$parsed")
+  make_parsed_file "$selection_file" "$parsed"
+
+  current=$(awk -F '\t' -v wanted="$name" '$1 == wanted { print $2 }' "$parsed")
+  [[ -n $current ]] || die "unknown Home Manager module '$name'"
+  if [[ $current == "$desired" ]]; then
+    if [[ $desired == true ]]; then
+      printf 'Already enabled: %s\n' "$name"
+    else
+      printf 'Already disabled: %s\n' "$name"
+    fi
+    return 0
+  fi
+
+  candidate=$(mktemp "$repository_root/home/.module-selection.nix.XXXXXXXX")
+  cleanup_paths+=("$candidate")
+  gawk -v target="$name" -v desired="$desired" '
+    {
+      line = $0
+      probe = line
+      sub(/^[[:space:]]+/, "", probe)
+      if (probe ~ ("^" target "[[:space:]]*=")) {
+        sub(/=[[:space:]]*(true|false);/, "= " desired ";", line)
+        changed++
+      }
+      print line
+    }
+    END { if (changed != 1) exit 1 }
+  ' "$selection_file" > "$candidate" || die "could not edit an unambiguous assignment for '$name'"
+
+  format_candidate "$candidate"
+  candidate_parsed=$(mktemp "${TMPDIR:-/tmp}/koru-home-modules-candidate.XXXXXXXX")
+  cleanup_paths+=("$candidate_parsed")
+  make_parsed_file "$candidate" "$candidate_parsed"
+  evaluate_candidate "$candidate"
+
+  local current_hash
+  current_hash=$(sha256sum "$selection_file" | cut -d ' ' -f1)
+  [[ $current_hash == "$original_hash" ]] || die 'switchboard changed concurrently; original left untouched'
+  chmod --reference="$selection_file" "$candidate"
+  mv -- "$candidate" "$selection_file"
+
+  printf '%s: %s\n' "$name" "$desired"
+  printf '%s\n' 'No profile was activated. Apply explicitly with:'
+  printf '  just home-configuration-switch\n'
+}
+
+case ${1:-} in
+  list) list_modules ;;
+  validate) validate_file "$selection_file"; printf '%s\n' 'Home module selection is valid.' ;;
+  enable) [[ $# == 2 ]] || die 'usage: home-modules enable NAME'; edit_module "$2" true ;;
+  disable) [[ $# == 2 ]] || die 'usage: home-modules disable NAME'; edit_module "$2" false ;;
+  *) die 'usage: home-modules list|validate|enable NAME|disable NAME' ;;
+esac

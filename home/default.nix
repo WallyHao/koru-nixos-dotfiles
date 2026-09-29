@@ -20,6 +20,7 @@
 }:
 let
   helpers = import ../lib/module-discovery.nix { inherit lib; };
+  dependencies = import ../lib/home-module-dependencies.nix;
 
   control = [
     "default"
@@ -40,6 +41,16 @@ let
   drift =
     map (n: "unlisted ${n}") (builtins.filter (n: !(builtins.elem n flags)) allFiles)
     ++ map (n: "unknown ${n}") (builtins.filter (n: !(builtins.elem n allFiles)) flags);
+  missingDependencies = lib.flatten (
+    lib.mapAttrsToList (
+      module: requirements:
+      lib.optionals (enabled.enable.${module} or false) (
+        map (requirement: "${module} requires ${requirement}") (
+          builtins.filter (requirement: !(enabled.enable.${requirement} or false)) requirements
+        )
+      )
+    ) dependencies
+  );
 in
 {
   imports = map (n: modules.${n}) selected;
@@ -49,7 +60,19 @@ in
       assertion = drift == [ ];
       message = "home/module-selection.nix and home/ disagree: ${lib.concatStringsSep ", " drift}";
     }
+    {
+      assertion = missingDependencies == [ ];
+      message = "invalid Home Manager module selection: ${lib.concatStringsSep ", " missingDependencies}";
+    }
   ];
+
+  warnings =
+    lib.optional (
+      !(enabled.enable.niri or false)
+    ) "The Niri desktop is disabled; no graphical session is configured."
+    ++ lib.optional (
+      !(enabled.enable.tty-login or false)
+    ) "TTY login no longer starts the graphical session automatically.";
 
   home.username = username;
   home.homeDirectory = "/home/${username}";

@@ -98,3 +98,19 @@ system-generations-prune age="7d" force="false" allow_battery="false":
 # Expire old standalone Home Manager generations after confirmation.
 home-generations-prune age="7d" force="false" allow_battery="false":
     ./scripts/maintenance home-generations-prune {{quote(age)}} {{quote(force)}} {{quote(allow_battery)}}
+
+# Show configured Home Manager module flags.
+home-modules-list:
+    @./scripts/home-modules list
+
+# Enable one module flag after transactional validation; do not activate it.
+home-module-enable name:
+    ./scripts/home-modules enable {{quote(name)}}
+
+# Disable one module flag after transactional validation; do not activate it.
+home-module-disable name:
+    ./scripts/home-modules disable {{quote(name)}}
+
+# Validate switchboard syntax, inventory, dependencies and selected evaluation.
+home-modules-validate:
+    ./scripts/home-modules validate
