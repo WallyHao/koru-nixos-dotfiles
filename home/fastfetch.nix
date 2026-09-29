@@ -1,11 +1,23 @@
 # --- fastfetch ---
-# On-demand system info. No ASCII logo (logo.type = "none"), and the module
-# list adds Sound + Brightness to the usual host/kernel/CPU/GPU/memory/disk.
-_: {
+# On-demand system info with a small static Koru fern mark. The logo is plain
+# text: it adds no animation, daemon or continuous rendering.
+{ theme, ... }:
+{
   programs.fastfetch = {
     enable = true;
     settings = {
-      logo.type = "none";
+      logo = {
+        type = "data";
+        source = ''
+                   __
+                __/ /
+             __/ /_/
+           _/ /_/
+          /_/
+        '';
+        color."1" = theme.accent;
+        padding.right = 2;
+      };
       display.separator = "  ";
       modules = [
         "title"

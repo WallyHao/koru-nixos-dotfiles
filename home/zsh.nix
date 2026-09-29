@@ -14,7 +14,7 @@
   ...
 }:
 let
-  # Warm-apricot palette pulled from the global theme (system/theme.nix).
+  # Koru Fern palette pulled from the global theme (system/theme.nix).
   palette = {
     bg = theme.bg;
     panel = theme.bg-alt;
@@ -168,7 +168,7 @@ in
       # powerlevel10k (sourced after oh-my-zsh sets the theme)
       source ${config.home.homeDirectory}/.p10k.zsh
 
-      # Re-theme p10k to the global warm-apricot palette (system/theme.nix). Set after
+      # Re-theme p10k to the global Koru Fern palette (system/theme.nix). Set after
       # the wizard config so these win, then force p10k to re-init.
       ${p10kOverrideLines}
       (( ! $+functions[p10k] )) || p10k reload

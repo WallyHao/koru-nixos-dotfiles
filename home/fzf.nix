@@ -42,9 +42,8 @@ let
   # fzf --color spec, shared by the main fzf (programs.fzf.colors below) and
   # fzf-tab. fzf-tab gets it as an explicit CLI flag because relying on it
   # inheriting FZF_DEFAULT_OPTS proved unreliable.
-  # Green is used only as a sparse secondary accent (match highlight, the
-  # multi-select marker and the match counter); prompt/pointer/border/spinner
-  # stay orange so the layout keeps its warm identity.
+  # Fern green is the restrained identity accent used for focus, matches and
+  # selection markers while semantic ANSI colors keep their distinct roles.
   fzfColors = lib.concatStringsSep "," [
     "bg:${theme.bg}"
     "bg+:${theme.bg-alt}"
@@ -125,7 +124,7 @@ let
     "*.pdf=${rgb theme.urgent}"
   ];
   # fzf-tab colors each group (and the completion description that trails the
-  # candidate) with these; all the accent orange so the right-side annotation
+  # candidate) with these; all use the fern accent so the right-side annotation
   # matches niri's accent. fzf-tab indexes directly by group number, so provide
   # 16.
   groupColors = lib.concatStringsSep " " (lib.replicate 16 (fg24 theme.accent));

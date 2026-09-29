@@ -6,8 +6,8 @@
 { pkgs, theme, ... }:
 
 let
-  p10kCursor = pkgs.stdenvNoCC.mkDerivation {
-    pname = "bibata-cursors-p10k";
+  koruCursor = pkgs.stdenvNoCC.mkDerivation {
+    pname = "bibata-cursors-koru";
     version = "2.0.7";
 
     src = pkgs.fetchFromGitHub {
@@ -32,14 +32,14 @@ let
 
       # Recolor the amber bitmaps: fill to theme.black, border to theme.accent.
       mkdir -p $PWD/bitmaps
-      cp -r $bitmaps/Bibata-Modern-Amber $PWD/bitmaps/Bibata-Modern-P10K
-      chmod -R u+w $PWD/bitmaps/Bibata-Modern-P10K
-      find $PWD/bitmaps/Bibata-Modern-P10K -name '*.png' -exec convert {} -fuzz 15% -fill '${theme.black}' -opaque '#FF8300' -type TrueColorMatte PNG32:{} \;
-      find $PWD/bitmaps/Bibata-Modern-P10K -name '*.png' -exec convert {} -fuzz 12% -fill '${theme.accent}' -opaque '#FFFFFF' -type TrueColorMatte PNG32:{} \;
+      cp -r $bitmaps/Bibata-Modern-Amber $PWD/bitmaps/Bibata-Modern-Koru
+      chmod -R u+w $PWD/bitmaps/Bibata-Modern-Koru
+      find $PWD/bitmaps/Bibata-Modern-Koru -name '*.png' -exec convert {} -fuzz 15% -fill '${theme.black}' -opaque '#FF8300' -type TrueColorMatte PNG32:{} \;
+      find $PWD/bitmaps/Bibata-Modern-Koru -name '*.png' -exec convert {} -fuzz 12% -fill '${theme.accent}' -opaque '#FFFFFF' -type TrueColorMatte PNG32:{} \;
 
       ctgen configs/normal/x.build.toml -p x11 \
-        -d $PWD/bitmaps/Bibata-Modern-P10K \
-        -n 'Bibata-Modern-P10K' \
+        -d $PWD/bitmaps/Bibata-Modern-Koru \
+        -n 'Bibata-Modern-Koru' \
         -c 'Bibata Modern recolored to the global theme accent' \
         -o $PWD/themes
 
@@ -49,7 +49,7 @@ let
     installPhase = ''
       runHook preInstall
       install -dm 0755 $out/share/icons
-      cp -rf $PWD/themes/Bibata-Modern-P10K $out/share/icons/
+      cp -rf $PWD/themes/Bibata-Modern-Koru $out/share/icons/
       runHook postInstall
     '';
 
@@ -69,7 +69,7 @@ in
   home.pointerCursor = {
     enable = true;
     name = theme.cursor-name;
-    package = p10kCursor;
+    package = koruCursor;
     size = theme.cursor-size;
     gtk.enable = true;
   };

@@ -1,7 +1,7 @@
 # --- satty ---
 # Screenshot annotation tool (replaces swappy). Colors/font come from the
 # global theme (system/theme.nix). Satty's window chrome is GTK4/Adwaita, so a CSS
-# override is used to make it dark and warm instead of stock Adwaita.
+# override is used to apply the dark Koru Fern palette instead of stock Adwaita.
 { pkgs, theme, ... }:
 let
   # Satty's palette wants #RRGGBBAA; theme colors have no alpha channel.

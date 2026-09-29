@@ -3,8 +3,8 @@
 # Every tool (alacritty, btop, niri, gtk, tty, nvim, p10k, ...) references
 # this file, so changing the palette here re-themes the whole system.
 #
-# Palette: "warm apricot" (inspired by powerlevel10k), from the current
-# terminal config (~/.config/alacritty/alacritty.toml).
+# Palette: "Koru Fern", a low-glare green-charcoal palette with restrained
+# botanical accents. ANSI roles remain distinct for diagnostics and diffs.
 {
   # --- Font ---
   font = "Maple Mono NF CN";
@@ -17,68 +17,68 @@
   # One definition for the whole session: home/cursor-theme.nix recolors the
   # theme to the palette below, and home.pointerCursor propagates the name/size
   # to GTK; niri reads it through its cursor block in home/niri.nix.
-  cursor-name = "Bibata-Modern-P10K";
+  cursor-name = "Bibata-Modern-Koru";
   cursor-size = 24;
 
   # --- Semantic colors ---
   # Used for backgrounds, text, accents, borders, cursor, selection.
-  bg = "#1D1A16"; # primary background
-  bg-alt = "#2E2A24"; # dim background (e.g. normal black)
-  fg = "#D6CBBC"; # primary foreground
-  fg-bright = "#D8CDBC"; # bright subset of foreground
-  muted = "#C9BFAE"; # dim text (e.g. normal white)
-  muted-alt = "#7D7561"; # inactive/box lines (btop boxes, git)
-  accent = "#C9905F"; # accent/orange (cursor, titles, focus)
-  accent-deep = "#B0684A"; # deep accent (graph starts)
-  accent-bright = "#FFD08A"; # brighter accent (prompt symbol, highlights)
-  accent-bg = "#3D3324"; # selection background
-  cursor = "#E8DCC8"; # cursor text / selection text
-  border = "#4A4138"; # inactive borders, gray tones
-  urgent = "#C47A4F"; # urgent/alert
-  black = "#211D10"; # deep black (e.g. focused window bg)
+  bg = "#171E1A"; # primary background
+  bg-alt = "#222D26"; # raised surfaces and panels
+  fg = "#D2DCD0"; # primary foreground
+  fg-bright = "#E1E8DB"; # emphasized foreground
+  muted = "#A5B3A2"; # secondary readable text
+  muted-alt = "#788A78"; # decoration and disabled text
+  accent = "#8FBF88"; # fern green for focus and titles
+  accent-deep = "#527B59"; # graph starts and decoration
+  accent-bright = "#B4D6A2"; # sparse highlights
+  accent-bg = "#334936"; # selection background
+  cursor = "#DEE7D5"; # cursor and selection text
+  border = "#425347"; # inactive borders
+  urgent = "#D39B79"; # warnings and attention
+  black = "#121813"; # deepest surface and text on bright accents
 
   # --- ANSI 16-color palette ---
   # normal (0-7)
   ansi = {
-    black = "#2E2A24";
-    red = "#BC6C4E";
-    green = "#7C9A6E";
-    yellow = "#BFA05F";
-    blue = "#7E98AC";
-    magenta = "#A58595";
-    cyan = "#73A09E";
-    white = "#C9BFAE";
+    black = "#222D26";
+    red = "#CC8F88";
+    green = "#8FBF88";
+    yellow = "#C4B783";
+    blue = "#8EAAB8";
+    magenta = "#B39BB5";
+    cyan = "#88B8AB";
+    white = "#D2DCD0";
   };
   # bright (8-15)
   ansi-bright = {
-    black = "#443D33";
-    red = "#D08A66";
-    green = "#8FAF80";
-    yellow = "#D4B87E";
-    blue = "#9FB4C4";
-    magenta = "#C3A0AE";
-    cyan = "#97BDBA";
-    white = "#D8CDBC";
+    black = "#526457";
+    red = "#DDA39A";
+    green = "#B4D6A2";
+    yellow = "#D8CCA0";
+    blue = "#ACC3CE";
+    magenta = "#CAB5CA";
+    cyan = "#A6D0C2";
+    white = "#E1E8DB";
   };
   # TTY console palette: 16 entries (8 normal + 8 bright). Tuned separately from
   # the ANSI palette above because the Linux console renders them differently
   # (black == bg on the tty); kept here so tty.nix stays theme-driven.
   console-colors = [
-    "#1D1A16" # black
-    "#BC6C4E" # red
-    "#7D7561" # green
-    "#C9905F" # yellow
-    "#5E7E96" # blue
-    "#A9807F" # magenta
-    "#6E9B92" # cyan
-    "#D6CBBC" # white
-    "#554E42" # bright black
-    "#C67A5B" # bright red
-    "#9A9160" # bright green
-    "#DBA06A" # bright yellow
-    "#7D9FBA" # bright blue
-    "#C69B9A" # bright magenta
-    "#8AB5AB" # bright cyan
-    "#F0E7DA" # bright white
+    "#171E1A" # black
+    "#CC8F88" # red
+    "#8FBF88" # green
+    "#C4B783" # yellow
+    "#8EAAB8" # blue
+    "#B39BB5" # magenta
+    "#88B8AB" # cyan
+    "#D2DCD0" # white
+    "#526457" # bright black
+    "#DDA39A" # bright red
+    "#B4D6A2" # bright green
+    "#D8CCA0" # bright yellow
+    "#ACC3CE" # bright blue
+    "#CAB5CA" # bright magenta
+    "#A6D0C2" # bright cyan
+    "#E1E8DB" # bright white
   ];
 }

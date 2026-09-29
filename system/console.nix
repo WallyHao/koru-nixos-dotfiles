@@ -1,6 +1,5 @@
 # --- tty ---
-# Linux console (tty): terminus font + p10k warm-apricot palette from the
-# global theme.
+# Linux console (tty): terminus font + Koru Fern palette from the global theme.
 {
   pkgs,
   lib,

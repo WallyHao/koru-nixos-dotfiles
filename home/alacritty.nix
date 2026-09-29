@@ -59,7 +59,7 @@
       # Selecting text copies it to the clipboard immediately (Wayland wl-copy).
       selection.save_to_clipboard = true;
 
-      # Beam cursor: matches the warm-apricot accent, easier to spot than a block.
+      # Beam cursor: matches the fern accent, easier to spot than a block.
       cursor.style = {
         shape = "Beam";
         blinking = "On";

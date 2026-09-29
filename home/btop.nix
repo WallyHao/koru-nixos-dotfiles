@@ -1,22 +1,20 @@
 # --- btop ---
-# System monitor: warm-apricot theme generated from the global theme.
-# Green (theme.ansi*.green) is used as a secondary accent on box titles, the
-# process misc column and the "available"/"download" meters, so the UI is less
-# monotone. Box borders (cpu/mem/net/proc_box + div_line) stay muted-alt.
+# System monitor: Koru Fern theme generated from the global theme. Box borders
+# (cpu/mem/net/proc_box + div_line) stay muted-alt.
 { theme, ... }:
 {
   programs.btop = {
     enable = true;
     settings = {
-      color_theme = "warm-apricot";
+      color_theme = "koru-fern";
       theme_background = false;
       truecolor = true;
       rounded_corners = true;
       graph_symbol = "braille";
       update_ms = 2000;
     };
-    themes.warm-apricot = ''
-      # Warm Apricot
+    themes.koru-fern = ''
+      # Koru Fern
       # btop theme generated from the global system/theme.nix
 
       # Main bg
