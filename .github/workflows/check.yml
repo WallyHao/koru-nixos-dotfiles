@@ -21,12 +21,23 @@ jobs:
       # Runs the nixfmt/statix/deadnix checks and evaluates
       # nixosConfigurations.koru, which embeds home-manager for that host.
       # It does NOT evaluate homeConfigurations.
-      - run: nix flake check --print-build-logs
+      - run: nix flake check --no-update-lock-file --print-build-logs
 
       # Force evaluation of the standalone user profile (whose pkgs instance is
       # built separately) and of every home module, including ones no host
       # currently imports, so a rotted config fails CI instead of surprising us
       # the day it is re-enabled.
       - run: |
-          nix eval --raw .#homeConfigurations.koru.activationPackage.drvPath
-          nix eval --raw .#homeConfigurations.all.activationPackage.drvPath
+          nix eval --no-update-lock-file --raw .#homeConfigurations.koru.activationPackage.drvPath
+          nix eval --no-update-lock-file --raw .#homeConfigurations.all.activationPackage.drvPath
+
+      # Shell contracts are tested with local mocks only; ordinary CI does not
+      # probe proxy nodes, run speed tests or activate a profile.
+      - run: |
+          nix develop --no-update-lock-file --command bash -euo pipefail -c '
+            shellcheck scripts/maintenance scripts/home-modules scripts/proxyctl.sh \
+              scripts/field-notes.sh tests/home-modules/run.sh tests/proxyctl/run.sh
+            just --list
+            tests/proxyctl/run.sh
+            tests/home-modules/run.sh
+          '

@@ -1,7 +1,7 @@
 # Koru Improvement Plan
 
-Status: planning only. No implementation, activation, rebuild, dependency update,
-garbage collection, or runtime configuration change is part of this task.
+Status: implementation reference. Activation, dependency updates, garbage
+collection, and runtime configuration changes remain explicit user actions.
 
 ## 1. Goals and boundaries
 
@@ -16,7 +16,7 @@ may contain other languages and must remain intact.
 Preserve the existing host identity, hardware configuration, state versions,
 dependency pins, and power policy during these improvements. Existing uncommitted
 changes are the baseline; do not overwrite them. Implement the work in separate,
-reviewable changes. The future `Justfile` is specified here, not created now.
+reviewable changes.
 
 ## 2. Repository findings
 
@@ -410,18 +410,13 @@ cannot establish that the correct layer receives the key.
 
 ## 8. Distinctive directions for Koru
 
-These are optional follow-up features, separate from the requested implementation.
-Use botanical names for presentation while keeping commands and settings explicit.
+Only the accepted follow-up features are in scope. Use botanical names for
+presentation while keeping commands and settings explicit.
 
 | Direction | Concrete feature | Battery/work constraint | Success criterion |
 | --- | --- | --- | --- |
 | Fern identity | Shared palette, small static fern mark, consistent terminal/CLI typography | No animation or new rendering daemon | Recognizable across existing surfaces |
-| Quiet Work | Explicit focus session with stable Niri workspaces and optional notification suppression | Event-driven changes; no polling | Fewer interruptions; easy restore |
 | Field Notes | On-demand power report with AC state, discharge rate, refresh rate, and active profile | Read existing sysfs/UPower data only when requested | Reproducible idle/workload comparisons |
-| Travel Ready | Pre-build the selected generation and project development environments before travel | Run preparation on AC; no automatic huge cache downloads | Chosen projects work offline |
-| Project Habitats | Opt-in project dev shells for Rust, ROS, C/C++, and writing | Keep heavy toolchains out of unrelated sessions | Reproducible project setup without background services |
-| Maintenance Window | A visible queue for expensive checks/builds/cleanup, executed on AC when requested | Reuse existing power ownership and timer conditions | No surprise battery-heavy jobs |
-| Recovery Trail | Record source revision/dirty state with generation references and rollback notes | Small local metadata; respect generation retention | Trace a deployed system to its reviewed source |
 
 Start with Fern identity and Field Notes. Record a battery baseline at fixed
 brightness, refresh rate, network state, and workload before introducing any
@@ -484,6 +479,6 @@ from this repository's pins. Verify the locked versions before writing changes.
 - [Just working directory](https://just.systems/man/en/working-directory.html): recipe directory behavior.
 - [Just shell completions](https://just.systems/man/en/shell-completion-scripts.html): generated completion scripts.
 
-Completion of this planning task means only that this document exists. All
-implementation steps, command executions, measurements, and acceptance tests above
-remain future work.
+Completion requires the implementation commits and automated quality gates in
+addition to this reference. Activation and interactive desktop/input checks remain
+deliberate post-review actions.

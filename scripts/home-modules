@@ -60,7 +60,7 @@ parse_selection() {
 module_inventory() {
   find "$repository_root/home" -maxdepth 1 -type f -name '*.nix' -printf '%f\n' |
     sed 's/\.nix$//' |
-    grep -Ev '^(default|module-selection)$' |
+    grep -Ev '^(default|module-selection|[.]module-selection[.].*)$' |
     LC_ALL=C sort
 }
 
@@ -93,6 +93,7 @@ evaluate_candidate() {
   source_copy=$(mktemp -d "${TMPDIR:-/tmp}/koru-home-modules.XXXXXXXX")
   cleanup_paths+=("$source_copy")
   cp -a -- "$repository_root/." "$source_copy/repository"
+  rm -f -- "$source_copy/repository/home/$(basename -- "$candidate")"
   cp -- "$candidate" "$source_copy/repository/home/module-selection.nix"
   nix eval --no-update-lock-file --raw \
     "path:$source_copy/repository#homeConfigurations.koru.activationPackage.drvPath" >/dev/null
@@ -138,7 +139,7 @@ edit_module() {
     return 0
   fi
 
-  candidate=$(mktemp "$repository_root/home/.module-selection.nix.XXXXXXXX")
+  candidate=$(mktemp "$repository_root/home/.module-selection.XXXXXXXX.nix")
   cleanup_paths+=("$candidate")
   gawk -v target="$name" -v desired="$desired" '
     {

@@ -7,27 +7,30 @@ software and hardware identity are managed separately; the shared theme lives in
 
 ## Daily operations
 
-Run these on NixOS from the repository root:
+The repository `Justfile` is the documented interface. Run `just` to list all
+recipes; build, test, activation, rollback and cleanup remain separate actions.
+For example:
 
 ```sh
 cd ~/.config/nixos
 
-# Evaluate first, then build; build does not activate the system
-nix eval --raw .#nixosConfigurations.koru.config.system.build.toplevel.drvPath
-sudo nixos-rebuild build --flake .#koru
+# Evaluate and build without activation
+just configuration-evaluate
+just system-configuration-build
 
-# Apply the system and the embedded Home Manager config after a successful build
-sudo nixos-rebuild switch --flake .#koru
+# Apply the system and embedded Home Manager profile after review
+just system-configuration-switch
 
-# Apply the user config only; does not install system-side Niri, input method or drivers
-home-manager switch --flake .#koru
+# Apply only the standalone user profile, without sudo
+just home-configuration-switch
 ```
 
-There is no `justfile` in this repository; `home/just.nix` only installs the
-just tool. A Git flake only includes registered files. After adding or renaming
-files, check `git status` first, use `git add --intent-to-add <new file>` so new
-paths take part in local evaluation, then review and commit. Do not use
-`git add .` to overwrite unstaged selections.
+Expensive recipes are AC-only by default; pass `allow_battery=true` only as an
+explicit manual override. `system-configuration-test` can restart services even
+though the generation is temporary. A Git flake only includes registered files:
+after adding or renaming files, review `git status` and use
+`git add --intent-to-add <new file>` before local evaluation. Recipes never
+update `flake.lock` or stage files implicitly.
 
 ## Directories and responsibilities
 
@@ -50,7 +53,10 @@ paths take part in local evaluation, then review and commit. Do not use
 | `home/niri/` | Niri launcher, idle dimming and keybindings |
 | `home/dotfiles/` | Non-Nix files referenced by modules |
 | `lib/module-discovery.nix` | User module discovery function |
+| `lib/home-module-dependencies.nix` | Valid cross-module dependency combinations |
 | `lib/wmenu-style.nix` | Generate wmenu arguments from the shared theme |
+| `scripts/` | Maintenance, module editing, proxy and Field Notes logic |
+| `completions/` | Repository-owned shell completions |
 | `.github/workflows/check.yml` | Format, static analysis and config evaluation CI |
 
 `default.nix` is only a directory entry, and its role is defined by its parent
@@ -119,9 +125,20 @@ For example `c-cpp-toolchain`, `java-toolchain`, `clipboard-history`,
 `cursor-theme`, `tty-login` and `zen-browser` all correspond to files of the same
 name. When deleting a module, delete its switch too. Helper files under
 `home/niri/` are imported by `home/niri.nix` and are not scanned by the top-level
-switchboard. The switch controls module import and does not guarantee complete
-independence between applications: when disabling a terminal or launcher, also
-check the Niri keybindings.
+switchboard. Known command dependencies are asserted, so an invalid combination
+fails before the switchboard is replaced.
+
+Use the transactional commands rather than editing booleans mechanically:
+
+```sh
+just home-modules-list
+just home-module-disable name=libreoffice
+just home-module-enable name=libreoffice
+just home-modules-validate
+```
+
+Enable/disable validates syntax, inventory, dependency rules and a temporary
+copy of the selected Home Manager output. It does not activate a profile.
 
 When adding a system module, register the file explicitly in
 `system/default.nix`. Do not mix data or utility functions into imports; put
@@ -135,14 +152,14 @@ git status --short
 nix flake update                  # or only: nix flake update github-hosts
 git diff -- flake.lock
 
-# Format all Nix sources
-find . -path ./.git -prune -o -name '*.nix' -type f -exec nix fmt -- {} +
-nix flake check --no-update-lock-file --print-build-logs
-nix eval --raw .#homeConfigurations.koru.activationPackage.drvPath
-nix eval --raw .#homeConfigurations.all.activationPackage.drvPath
+# Non-mutating checks
+just configuration-format-check
+just configuration-lint-check
+just configuration-dead-code-check
+just configuration-check
 
 # Return to the previous system generation
-sudo nixos-rebuild switch --rollback
+just system-generation-rollback
 ```
 
 `nixosConfigurations.koru` includes the system and the embedded Home Manager;
@@ -184,14 +201,46 @@ After switching to this NixOS config, run inside NixOS:
 ```sh
 proxyctl refresh   # fetch the subscription, probe google.com per node, build the usable node table
 proxyctl start     # pick a node with up/down keys (Enter to confirm), start the global TUN proxy
-proxyctl status    # whether the service runs + the current node
+proxyctl nodes     # list the local cache and its cached latency values
+proxyctl status    # local service/controller/TUN/cache state; no external probe
 proxyctl shutdown  # stop the service and TUN
 ```
 
+An active proxy is not interrupted by `refresh` unless `--restore` is supplied.
+`status --latency`, `status --traffic` and `status --speed-test` are explicit,
+bounded measurements; the last one transfers at most 10 MiB for at most 15
+seconds through `127.0.0.1:7890`. `status --json` is uncolored and machine
+readable. Zsh completion reads node names only from the local cache and performs
+no network or privileged work.
+
 `refresh` keeps only nodes that can reach Google, sorted by latency, US first,
-written to `~/.config/mihomo/nodes.tsv`; the normalized subscription is written
+written to `~/.config/mihomo/nodes.json`; the normalized subscription is written
 to `~/.config/mihomo/provider.yaml` and handed to Mihomo via a systemd
 credential, so it does not download by itself before the proxy works. `start`
 lists only these usable nodes and uses the selection as the global egress. After
 changing the subscription URL, re-run `proxyctl refresh`; on start failure,
 inspect with `journalctl -u mihomo -b`.
+
+## Input switching and Field Notes
+
+Rime is configured so tapping either Shift key commits the raw Latin code before
+switching its ASCII mode. Framework switching uses `CommitRawInput`; keep that
+action on a distinct shortcut such as the default Ctrl+Space. After a Home
+Manager switch, redeploy/reload Rime and verify both Shift keys in terminal,
+browser, GTK and Qt applications—evaluation cannot test key routing.
+
+`field-notes` prints one on-demand power snapshot with AC state, battery rate,
+brightness, refresh rate, CPU governor/EPP, network state and load average. It
+does not poll or change policy. Record controlled baselines with a label that
+describes fixed brightness, refresh rate, network state and workload:
+
+```sh
+field-notes show
+field-notes --json
+field-notes record 'battery-60pct-60hz-wifi-idle'
+```
+
+Recorded JSON lines live in `~/.local/state/koru/field-notes.jsonl` with private
+permissions. This configuration keeps auto-cpufreq as the sole CPU policy owner;
+it does not add TLP or power-profiles-daemon, and the theme makes no battery-life
+claim.
