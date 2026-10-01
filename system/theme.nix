@@ -1,10 +1,10 @@
 # --- theme ---
 # Global theme: the single source of truth for colors/fonts.
-# Every tool (alacritty, btop, niri, gtk, tty, nvim, p10k, ...) references
+# Every tool (kitty, btop, niri, gtk, tty, nvim, p10k, ...) references
 # this file, so changing the palette here re-themes the whole system.
 #
-# Palette: "Koru Fern", a low-glare green-charcoal palette with restrained
-# botanical accents. ANSI roles remain distinct for diagnostics and diffs.
+# Palette: "Koru Fern", a low-glare green-charcoal palette with soft young-yellow
+# accents. ANSI roles remain distinct for diagnostics and diffs.
 {
   # --- Font ---
   font = "Maple Mono NF CN";
@@ -29,6 +29,8 @@
   muted = "#A5B3A2"; # secondary readable text
   muted-alt = "#788A78"; # decoration and disabled text
   accent = "#8FBF88"; # fern green for focus and titles
+  accent-yellow = "#E6D87A"; # soft young yellow for sparse UI accents
+  accent-yellow-bright = "#F5E9A6"; # brighter yellow for emphasized text
   accent-deep = "#527B59"; # graph starts and decoration
   accent-bright = "#B4D6A2"; # sparse highlights
   accent-bg = "#334936"; # selection background
@@ -43,7 +45,7 @@
     black = "#222D26";
     red = "#CC8F88";
     green = "#8FBF88";
-    yellow = "#C4B783";
+    yellow = "#E6D87A";
     blue = "#8EAAB8";
     magenta = "#B39BB5";
     cyan = "#88B8AB";
@@ -54,7 +56,7 @@
     black = "#526457";
     red = "#DDA39A";
     green = "#B4D6A2";
-    yellow = "#D8CCA0";
+    yellow = "#F5E9A6";
     blue = "#ACC3CE";
     magenta = "#CAB5CA";
     cyan = "#A6D0C2";
@@ -67,7 +69,7 @@
     "#171E1A" # black
     "#CC8F88" # red
     "#8FBF88" # green
-    "#C4B783" # yellow
+    "#E6D87A" # yellow
     "#8EAAB8" # blue
     "#B39BB5" # magenta
     "#88B8AB" # cyan
@@ -75,7 +77,7 @@
     "#526457" # bright black
     "#DDA39A" # bright red
     "#B4D6A2" # bright green
-    "#D8CCA0" # bright yellow
+    "#F5E9A6" # bright yellow
     "#ACC3CE" # bright blue
     "#CAB5CA" # bright magenta
     "#A6D0C2" # bright cyan
