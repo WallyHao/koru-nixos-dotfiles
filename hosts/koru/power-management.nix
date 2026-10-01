@@ -64,7 +64,7 @@ in
 
   # --- Battery reporting ---
   # upower powers battery UI and AC/battery events (auto-cpufreq and the screen
-  # profile in system/display-power.nix both listen for them).
+  # profile in hosts/koru/display-power.nix both listen for them).
   services.upower.enable = true;
 
   # --- Audio codec ---

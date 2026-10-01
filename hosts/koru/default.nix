@@ -7,6 +7,10 @@
     ./btrfs-mounts.nix
     ./locale.nix
     ./user-account.nix
+    ./bluetooth.nix
+    ./display-power.nix
+    ./intel-graphics.nix
+    ./power-management.nix
   ];
   networking.hostName = hostname;
   system.stateVersion = "26.11";

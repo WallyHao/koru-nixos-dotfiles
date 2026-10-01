@@ -1,7 +1,7 @@
 # --- screencast ---
 # Screen recording with gpu-screen-recorder (NVIDIA-free: uses the Intel
 # iGPU's VA-API encoder via gsr-kms-server). intel-media-driver lives in
-# system/intel-graphics.nix.
+# hosts/koru/intel-graphics.nix.
 { pkgs, ... }:
 
 {

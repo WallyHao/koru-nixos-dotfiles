@@ -12,6 +12,7 @@
   # watchdog timers (NMI/scheduler), saving a bit of boot and idle CPU time.
   boot.kernelParams = [
     "quiet"
+    "video=1920x1080" # Internal panel mode from boot.
     "8250.nr_uarts=0"
     "nowatchdog"
     "nmi_watchdog=0"
