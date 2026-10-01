@@ -78,6 +78,9 @@ in
   home.homeDirectory = "/home/${username}";
   home.stateVersion = "26.11";
 
+  # Installation is managed independently by `koru profile build`.
+  home.sessionPath = [ "\${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/koru-dev/bin" ];
+
   programs.home-manager.enable = true;
 
   # The line above installs the home-manager CLI only when home-manager runs

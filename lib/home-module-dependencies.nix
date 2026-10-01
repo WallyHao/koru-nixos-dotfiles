@@ -23,7 +23,6 @@
     "bat"
     "eza"
     "fzf"
-    "just"
     "libreoffice"
     "zen-browser"
   ];

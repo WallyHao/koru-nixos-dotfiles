@@ -19,7 +19,7 @@ _: {
       "https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store"
       "https://mirrors.ustc.edu.cn/nix-channels/store"
       "https://cache.nixos.org"
-      # ROS 2 binaries (home/ros2.nix) live only here; without it the
+      # ROS 2 binaries (profile/packages/ros2.nix) live only here; without it the
       # whole ROS closure would build from source. May be slow from CN.
       "https://ros.cachix.org"
     ];

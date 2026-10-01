@@ -48,21 +48,6 @@
       flake = false;
     };
 
-    # Provides `pkgs.rust-bin`, so the Rust toolchain can be pinned to an exact
-    # version and installed declaratively (home/rust.nix).
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # ROS 2 was dropped from nixpkgs; this community overlay provides
-    # `rosPackages.<distro>` (home/ros2.nix). Deliberately NOT following our
-    # nixpkgs: the overlay is generated against the revision it pins, so it is
-    # built with its own (tested) nixpkgs in `mkRosPkgs` below.
-    nix-ros-overlay = {
-      url = "github:lopsided98/nix-ros-overlay/master";
-    };
-
   };
 
   outputs =
@@ -75,8 +60,6 @@
 
       hosts = import ./hosts/inventory.nix;
 
-      overlays = [ inputs.rust-overlay.overlays.default ];
-
       # pkgs per target system: standalone home profiles and NixOS configs may
       # target different architectures once non-x86_64 hosts are added.
       # allowUnfree is repeated from system/nix-daemon.nix on purpose: standalone home
@@ -85,18 +68,7 @@
       mkPkgs =
         system:
         import nixpkgs {
-          inherit system overlays;
-          config.allowUnfree = true;
-        };
-
-      # ROS 2 packages need nix-ros-overlay applied. Keep that in a separate
-      # pkgs instance built from the overlay's own nixpkgs pin, so the huge
-      # Python/package overrides it carries cannot perturb the system set.
-      mkRosPkgs =
-        system:
-        import inputs.nix-ros-overlay.inputs.nixpkgs {
           inherit system;
-          overlays = [ inputs.nix-ros-overlay.overlays.default ];
           config.allowUnfree = true;
         };
 
@@ -110,14 +82,13 @@
       };
 
       # extraSpecialArgs shared by the embedded and standalone home profiles.
-      mkHomeSpecialArgs = enabled: host: {
+      mkHomeSpecialArgs = enabled: {
         inherit
           inputs
           theme
           username
           enabled
           ;
-        rosPkgs = mkRosPkgs host.system;
       };
 
       mkHost =
@@ -139,11 +110,10 @@
           ++ [
             inputs.home-manager.nixosModules.home-manager
             {
-              nixpkgs.overlays = overlays;
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
               home-manager.backupFileExtension = "hm-bak";
-              home-manager.extraSpecialArgs = mkHomeSpecialArgs homeEnabled host;
+              home-manager.extraSpecialArgs = mkHomeSpecialArgs homeEnabled;
               home-manager.users.${username} = {
                 imports = homeModules;
               };
@@ -155,7 +125,7 @@
         enabled: host:
         inputs.home-manager.lib.homeManagerConfiguration {
           pkgs = mkPkgs host.system;
-          extraSpecialArgs = mkHomeSpecialArgs enabled host;
+          extraSpecialArgs = mkHomeSpecialArgs enabled;
           modules = homeModules;
         };
 
