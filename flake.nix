@@ -159,7 +159,6 @@
             packages = with pkgs; [
               deadnix
               jq
-              just
               nixfmt
               shellcheck
               statix

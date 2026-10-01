@@ -24,50 +24,13 @@ validate_host() {
 
 warn_untracked_sources() {
   local paths
-  paths=$(git ls-files --others --exclude-standard -- '*.nix' 'Justfile' 'scripts/*' 'completions/*' 2>/dev/null || true)
+  paths=$(git ls-files --others --exclude-standard -- '*.nix' 'scripts/*' 'completions/*' 2>/dev/null || true)
   if [[ -n $paths ]]; then
     printf '%s\n' 'Warning: Git flakes ignore untracked source paths:' >&2
     while IFS= read -r path; do
       printf '  %s\n' "$path" >&2
     done <<< "$paths"
     printf '%s\n' 'Review them, then use git add --intent-to-add for local evaluation.' >&2
-  fi
-}
-
-on_ac_power() {
-  local supply type online
-  for supply in /sys/class/power_supply/*; do
-    [[ -r $supply/type && -r $supply/online ]] || continue
-    read -r type < "$supply/type"
-    case $type in
-      Mains | USB | USB_C | USB_PD)
-        read -r online < "$supply/online"
-        [[ $online == 1 ]] && return 0
-        ;;
-    esac
-  done
-  return 1
-}
-
-power_source() {
-  if on_ac_power; then
-    printf 'AC\n'
-  else
-    printf 'battery or unknown\n'
-  fi
-}
-
-require_ac() {
-  local allow_battery=${1:-false}
-  case $allow_battery in
-    true) return 0 ;;
-    false) ;;
-    *) die 'allow_battery must be true or false' ;;
-  esac
-  if ! on_ac_power; then
-    printf '%s\n' 'This potentially expensive operation is AC-only by default.' >&2
-    printf '%s\n' 'Re-run the recipe with allow_battery=true to override explicitly.' >&2
-    exit 1
   fi
 }
 
@@ -105,15 +68,13 @@ system_information() {
   printf 'OS:            %s\n' "$os_name"
   printf 'Kernel:        %s\n' "$(uname -sr)"
   printf 'System path:   %s\n' "$(readlink -f /run/current-system 2>/dev/null || printf unavailable)"
-  printf 'Power source:  %s\n' "$(power_source)"
 }
 
 system_configuration() {
-  local action=${1:-} host=${2:-} allow_battery=${3:-false}
+  local action=${1:-} host=${2:-}
   case $action in build | test | switch | boot) ;; *) die 'invalid system action' ;; esac
   [[ -n $host ]] || die 'host is required'
   validate_host "$host"
-  require_ac "$allow_battery"
   warn_untracked_sources
   if [[ $action == build ]]; then
     exec nixos-rebuild build --flake "$repository_root#$host" --no-update-lock-file
@@ -123,11 +84,10 @@ system_configuration() {
 }
 
 home_configuration() {
-  local action=${1:-} host=${2:-} allow_battery=${3:-false}
+  local action=${1:-} host=${2:-}
   case $action in build | switch) ;; *) die 'invalid Home Manager action' ;; esac
   [[ -n $host ]] || die 'host is required'
   validate_host "$host"
-  require_ac "$allow_battery"
   warn_untracked_sources
   exec home-manager "$action" --flake "$repository_root#$host" --no-update-lock-file
 }
@@ -203,25 +163,24 @@ case ${1:-} in
     printf '\n'
     ;;
   configuration-check)
-    require_ac "${2:-false}"
     nix flake check --no-update-lock-file --print-build-logs
+    nix flake check --no-update-lock-file --print-build-logs "path:$repository_root/profile"
     configuration_evaluate koru
     nix eval --no-update-lock-file --raw .#homeConfigurations.all.activationPackage.drvPath
     printf '\n'
     ;;
   garbage-collection-preview) garbage_collection_preview ;;
   garbage-collection-run)
-    require_ac "${2:-false}"
     exec nix-collect-garbage
     ;;
   system-generations-prune)
-    age=${2:-7d}; force=${3:-false}; allow_battery=${4:-false}
-    validate_age "$age"; require_ac "$allow_battery"; confirm_prune system "$age" "$force"
+    age=${2:-7d}; force=${3:-false}
+    validate_age "$age"; confirm_prune system "$age" "$force"
     exec sudo nix-env --profile /nix/var/nix/profiles/system --delete-generations "$age"
     ;;
   home-generations-prune)
-    age=${2:-7d}; force=${3:-false}; allow_battery=${4:-false}
-    validate_age "$age"; require_ac "$allow_battery"; confirm_prune home "$age" "$force"
+    age=${2:-7d}; force=${3:-false}
+    validate_age "$age"; confirm_prune home "$age" "$force"
     exec home-manager expire-generations "-$age"
     ;;
   *) die 'unknown maintenance command' ;;
