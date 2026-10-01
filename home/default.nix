@@ -1,10 +1,10 @@
 # --- home/default ---
 # Home-manager configuration for the user layer.
 #
-# home/module-selection.nix is the single switchboard: one boolean per module in home/,
+# home/modules-enables.nix is the single switchboard: one boolean per module in home/,
 # which doubles as the inventory of what home/ can install. The switchboard must
 # match the directory exactly (asserted below), so a flag can never point at a
-# missing file and a file can never sit unlisted. This file and module-selection.nix are
+# missing file and a file can never sit unlisted. This file and modules-enables.nix are
 # the control files, not modules, so discovery skips them.
 #
 # Because this layer owns only user config, the flake exposes it as a switchable
@@ -15,7 +15,7 @@
   lib,
   pkgs,
   username,
-  enabled ? import ./module-selection.nix,
+  enabled ? import ./modules-enables.nix,
   ...
 }:
 let
@@ -24,14 +24,14 @@ let
 
   control = [
     "default"
-    "module-selection"
+    "modules-enables"
   ];
   modules = lib.filterAttrs (n: _: !(builtins.elem n control)) (helpers.nixModules ./.);
   invalidFlags = builtins.filter (n: !(builtins.isBool enabled.enable.${n})) flags;
   selected =
     assert lib.assertMsg (
       invalidFlags == [ ]
-    ) "home/module-selection.nix: flags must be booleans: ${lib.concatStringsSep ", " invalidFlags}";
+    ) "home/modules-enables.nix: flags must be booleans: ${lib.concatStringsSep ", " invalidFlags}";
     builtins.filter (n: enabled.enable.${n} or false) (builtins.attrNames modules);
 
   # The switchboard and the directory must agree in both directions; name each
@@ -58,7 +58,7 @@ in
   assertions = [
     {
       assertion = drift == [ ];
-      message = "home/module-selection.nix and home/ disagree: ${lib.concatStringsSep ", " drift}";
+      message = "home/modules-enables.nix and home/ disagree: ${lib.concatStringsSep ", " drift}";
     }
     {
       assertion = missingDependencies == [ ];

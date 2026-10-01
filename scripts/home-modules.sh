@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repository_root=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-selection_file=$repository_root/home/module-selection.nix
+repository_root=${KORU_REPO:-$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}
+selection_file=$repository_root/home/modules-enables.nix
 
 die() {
   printf 'Error: %s\n' "$*" >&2
@@ -60,7 +60,7 @@ parse_selection() {
 module_inventory() {
   find "$repository_root/home" -maxdepth 1 -type f -name '*.nix' -printf '%f\n' |
     sed 's/\.nix$//' |
-    grep -Ev '^(default|module-selection|[.]module-selection[.].*)$' |
+    grep -Ev '^(default|modules-enables|[.]modules-enables[.].*)$' |
     LC_ALL=C sort
 }
 
@@ -84,7 +84,11 @@ make_parsed_file() {
 
 format_candidate() {
   local candidate=$1
-  nix develop --no-update-lock-file --command nixfmt "$candidate" >/dev/null
+  if command -v nixfmt >/dev/null; then
+    nixfmt "$candidate" >/dev/null
+  else
+    nix develop --no-update-lock-file "path:$repository_root" --command nixfmt "$candidate" >/dev/null
+  fi
 }
 
 evaluate_candidate() {
@@ -94,7 +98,7 @@ evaluate_candidate() {
   cleanup_paths+=("$source_copy")
   cp -a -- "$repository_root/." "$source_copy/repository"
   rm -f -- "$source_copy/repository/home/$(basename -- "$candidate")"
-  cp -- "$candidate" "$source_copy/repository/home/module-selection.nix"
+  cp -- "$candidate" "$source_copy/repository/home/modules-enables.nix"
   nix eval --no-update-lock-file --raw \
     "path:$source_copy/repository#homeConfigurations.koru.activationPackage.drvPath" >/dev/null
 }
@@ -115,45 +119,49 @@ list_modules() {
   awk -F '\t' '{ printf "%-24s %s\n", $1, $2 }' "$parsed"
 }
 
-edit_module() {
-  local name=$1 desired=$2
+edit_modules() {
+  local desired=$1
+  shift
+  local -a names=("$@")
   local lock_file=$repository_root/.git/home-modules.lock
   [[ -d $repository_root/.git ]] || lock_file=$repository_root/.home-modules.lock
   exec 9>"$lock_file"
   flock 9
 
-  local original_hash parsed current candidate candidate_parsed
+  local original_hash parsed current candidate candidate_parsed name changes=0
   original_hash=$(sha256sum "$selection_file" | cut -d ' ' -f1)
   parsed=$(mktemp "${TMPDIR:-/tmp}/koru-home-modules-current.XXXXXXXX")
   cleanup_paths+=("$parsed")
   make_parsed_file "$selection_file" "$parsed"
 
-  current=$(awk -F '\t' -v wanted="$name" '$1 == wanted { print $2 }' "$parsed")
-  [[ -n $current ]] || die "unknown Home Manager module '$name'"
-  if [[ $current == "$desired" ]]; then
-    if [[ $desired == true ]]; then
-      printf 'Already enabled: %s\n' "$name"
-    else
-      printf 'Already disabled: %s\n' "$name"
-    fi
+  # Validate every requested name before constructing a candidate.
+  for name in "${names[@]}"; do
+    [[ $name =~ ^[-A-Za-z0-9]+$ ]] || die "invalid module name '$name'"
+    current=$(awk -F '\t' -v wanted="$name" '$1 == wanted { print $2 }' "$parsed")
+    [[ -n $current ]] || die "unknown Home Manager module '$name'"
+    if [[ $current != "$desired" ]]; then changes=$((changes + 1)); fi
+  done
+  if ((changes == 0)); then
+    for name in "${names[@]}"; do
+      if [[ $desired == true ]]; then printf 'Already enabled: %s\n' "$name"
+      else printf 'Already disabled: %s\n' "$name"; fi
+    done
     return 0
   fi
 
-  candidate=$(mktemp "$repository_root/home/.module-selection.XXXXXXXX.nix")
+  candidate=$(mktemp "$repository_root/home/.modules-enables.XXXXXXXX.nix")
   cleanup_paths+=("$candidate")
-  gawk -v target="$name" -v desired="$desired" '
+  gawk -v targets="${names[*]}" -v desired="$desired" '
+    BEGIN { count = split(targets, names, " "); for (i = 1; i <= count; i++) wanted[names[i]] = 1 }
     {
       line = $0
       probe = line
       sub(/^[[:space:]]+/, "", probe)
-      if (probe ~ ("^" target "[[:space:]]*=")) {
-        sub(/=[[:space:]]*(true|false);/, "= " desired ";", line)
-        changed++
-      }
+      sub(/[[:space:]]*=.*/, "", probe)
+      if (probe in wanted) sub(/=[[:space:]]*(true|false);/, "= " desired ";", line)
       print line
     }
-    END { if (changed != 1) exit 1 }
-  ' "$selection_file" > "$candidate" || die "could not edit an unambiguous assignment for '$name'"
+  ' "$selection_file" > "$candidate"
 
   format_candidate "$candidate"
   candidate_parsed=$(mktemp "${TMPDIR:-/tmp}/koru-home-modules-candidate.XXXXXXXX")
@@ -167,15 +175,17 @@ edit_module() {
   chmod --reference="$selection_file" "$candidate"
   mv -- "$candidate" "$selection_file"
 
-  printf '%s: %s\n' "$name" "$desired"
-  printf '%s\n' 'No profile was activated. Apply explicitly with:'
-  printf '  just home-configuration-switch\n'
+  for name in "${names[@]}"; do
+    if [[ $desired == true ]]; then printf 'Enabled: %s\n' "$name"
+    else printf 'Disabled: %s\n' "$name"; fi
+  done
+  printf '%s\n' 'No profile was activated. Apply with koru home build.'
 }
 
 case ${1:-} in
-  list) list_modules ;;
-  validate) validate_file "$selection_file"; printf '%s\n' 'Home module selection is valid.' ;;
-  enable) [[ $# == 2 ]] || die 'usage: home-modules enable NAME'; edit_module "$2" true ;;
-  disable) [[ $# == 2 ]] || die 'usage: home-modules disable NAME'; edit_module "$2" false ;;
+  list) [[ $# == 1 ]] || die 'list takes no arguments'; list_modules ;;
+  validate) [[ $# == 1 ]] || die 'validate takes no arguments'; validate_file "$selection_file"; printf '%s\n' 'Home module selection is valid.' ;;
+  enable) [[ $# -ge 2 ]] || die 'usage: home-modules enable NAME...'; shift; edit_modules true "$@" ;;
+  disable) [[ $# -ge 2 ]] || die 'usage: home-modules disable NAME...'; shift; edit_modules false "$@" ;;
   *) die 'usage: home-modules list|validate|enable NAME|disable NAME' ;;
 esac

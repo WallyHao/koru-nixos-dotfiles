@@ -1,13 +1,13 @@
 # --- flake ---
 # NixOS flake: flake-parts composition + home-manager.
 #
-# One selection decides what the user layer installs: home/module-selection.nix, one
+# One selection decides what the user layer installs: home/modules-enables.nix, one
 # boolean per home module (the single switchboard and the inventory of what
 # home/ can install). home/default.nix asserts it matches the module directory.
 #
 # Outputs:
 #   - nixosConfigurations.<host> : full system, with home-manager embedded for
-#     that host, switchboard from home/module-selection.nix.
+#     that host, switchboard from home/modules-enables.nix.
 #   - homeConfigurations.<host>  : user layer only, switchboard as-is. Can be
 #     switched at runtime (`home-manager switch --flake .#<host>`).
 #   - homeConfigurations.all     : every user module forced on, evaluation
@@ -74,9 +74,9 @@
 
       homeModules = [ ./home/default.nix ];
 
-      # The user-layer switchboard (home/module-selection.nix) and its forced variant:
+      # The user-layer switchboard (home/modules-enables.nix) and its forced variant:
       # `all` turns every module on so nothing can rot unnoticed.
-      homeEnabled = import ./home/module-selection.nix;
+      homeEnabled = import ./home/modules-enables.nix;
       enabledAll = homeEnabled // {
         enable = builtins.mapAttrs (_: _: true) homeEnabled.enable;
       };
