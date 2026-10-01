@@ -72,7 +72,7 @@ run status | rg 'Differs from installed bundle' >/dev/null
 status=0
 run rollback --generation 999999 >/dev/null 2>&1 || status=$?
 [[ $status == 1 && $(readlink "$profile") == "$first" ]]
-nix profile add --profile "$profile" --no-update-lock-file \
+nix profile install --profile "$profile" --no-update-lock-file \
   "path:$KORU_REPO/profile#unmanaged" >/dev/null 2>&1
 unmanaged=$(readlink "$profile")
 unmanaged_id=${unmanaged#koru-dev-}; unmanaged_id=${unmanaged_id%-link}
@@ -90,7 +90,7 @@ run rollback --generation "$unmanaged_id" >/dev/null 2>&1 || status=$?
 rm "$profile"
 mkdir -p "$test_root/other-source"
 cp -a "$KORU_REPO/profile/." "$test_root/other-source/"
-nix profile add --profile "$profile" --no-update-lock-file \
+nix profile install --profile "$profile" --no-update-lock-file \
   "path:$test_root/other-source#dev-tools" >/dev/null 2>&1
 foreign=$(readlink "$profile")
 status=0

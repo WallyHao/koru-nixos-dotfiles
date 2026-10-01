@@ -52,7 +52,7 @@ koru_profile() {
       # add/upgrade builds before publishing a new profile generation. Failed
       # builds leave the installed generation intact; no remove/add gap.
       if jq -e '.elements | length == 0' <<< "$manifest" >/dev/null; then
-        koru_run nix profile add --profile "$dev_profile" --no-update-lock-file "$profile_installable"
+        koru_run nix profile install --profile "$dev_profile" --no-update-lock-file "$profile_installable"
       else
         koru_run nix profile upgrade --profile "$dev_profile" --no-update-lock-file dev-tools
       fi
