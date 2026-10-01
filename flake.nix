@@ -55,7 +55,7 @@
     let
       lib = nixpkgs.lib;
       system = "x86_64-linux";
-      username = "wallyhao";
+      username = "koru";
       theme = import ./system/theme.nix;
 
       hosts = import ./hosts/inventory.nix;

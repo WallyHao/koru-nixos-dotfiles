@@ -27,7 +27,7 @@ _: {
       "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
       "ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo="
     ];
-    # Let wheel users (wallyhao) use their chsrc-set ~/.config/nix/nix.conf
+    # Let wheel users (koru) use their chsrc-set ~/.config/nix/nix.conf
     # without the "ignoring untrusted substituter" warning.
     trusted-users = [
       "root"
