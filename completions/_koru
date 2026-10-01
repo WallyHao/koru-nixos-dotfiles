@@ -1,0 +1,36 @@
+#compdef koru
+
+_koru() {
+  local context state line
+  typeset -A opt_args
+  _arguments -C \
+    '(-h --help)'{-h,--help}'[show help]' \
+    '1:group:(system home profile proxy store)' \
+    '2:action:->action' \
+    '*::options:->options'
+  case $state in
+    action)
+      case $words[2] in
+        system) _values action build check list rollback ;;
+        home) _values action build check list rollback modules enable disable validate ;;
+        profile) _values action build check status list rollback ;;
+        proxy) _values action status list refresh start stop autostart ;;
+        store) _values action status gc ;;
+      esac
+      ;;
+    options)
+      if [[ $line[2] == rollback ]]; then
+        _arguments '--generation=[generation ID]:generation ID:'
+      elif [[ $line[1] == home && ( $line[2] == enable || $line[2] == disable ) ]]; then
+        local file=$HOME/.config/nixos/home/modules-enables.nix
+        local -a modules
+        if [[ -r $file ]]; then
+          modules=("${(@f)$(sed -nE 's/^[[:space:]]*([-A-Za-z0-9]+)[[:space:]]*=[[:space:]]*(true|false);.*$/\1/p' "$file")}")
+          _wanted modules expl 'home module' compadd -a modules
+        fi
+      fi
+      ;;
+  esac
+}
+
+_koru "$@"

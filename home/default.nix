@@ -15,6 +15,7 @@
   lib,
   pkgs,
   username,
+  theme,
   enabled ? import ./modules-enables.nix,
   ...
 }:
@@ -88,5 +89,10 @@ in
   # the module then adds nothing, so `home-manager switch` (the <host> output)
   # would be unreachable from a fresh shell. Put the CLI in the system per-user
   # profile instead; the standalone path already gets it from the flag.
-  home.packages = lib.optional config.submoduleSupport.enable pkgs.home-manager;
+  home.packages = lib.optional config.submoduleSupport.enable pkgs.home-manager ++ [
+    (import ../lib/koru-package.nix {
+      inherit pkgs lib theme;
+      repositoryRoot = "${config.home.homeDirectory}/.config/nixos";
+    })
+  ];
 }
