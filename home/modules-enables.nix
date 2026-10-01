@@ -18,6 +18,7 @@
     clipboard-history = true;
     codex = true;
     cursor-theme = true;
+    drawio = true;
     eza = true;
     fastfetch = true;
     fcitx5 = true;
