@@ -15,35 +15,61 @@ speed_test_url=${PROXYCTL_SPEED_TEST_URL:-https://speed.cloudflare.com/__down?by
 controller=127.0.0.1:9090
 api=http://$controller
 color_policy=auto
+cache_dir=$config_dir/cache
+legacy_provider_file=$provider_file
+original_nodes_file=$nodes_file
+operation_lock=${PROXYCTL_OPERATION_LOCK:-$config_dir/operation.lock}
+service_lock=${PROXYCTL_SERVICE_LOCK:-/run/proxyctl/service.lock}
+operation_locked=false
+previous_cache=
 
 temporary_paths=()
 background_pids=()
 restore_pending=false
 restore_node=
 
-cleanup() {
-  local status=$? path pid
-  trap - EXIT INT TERM
+cleanup_resources() {
+  local path pid
   for pid in "${background_pids[@]}"; do
     kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
   done
-  for path in "${temporary_paths[@]}"; do
-    [[ -e $path ]] && rm -rf -- "$path"
-  done
+  background_pids=()
   if [[ $restore_pending == true && -n $restore_node ]]; then
+    if [[ -n $previous_cache ]]; then
+      activate_cache "$previous_cache" ||
+        printf '%s\n' 'Could not restore the previous cache.' >&2
+    fi
     printf '%s\n' 'Refresh did not finish; attempting to restore the previous proxy node.' >&2
     "$sudo_command" -- "$0" __enable "$restore_node" >/dev/null ||
       printf '%s\n' 'Could not restore the previous proxy automatically.' >&2
+    restore_pending=false
   fi
+  for path in "${temporary_paths[@]}"; do
+    [[ -e $path || -L $path ]] && rm -rf -- "$path"
+  done
+  temporary_paths=()
+}
+
+cleanup() {
+  local status=$?
+  trap - EXIT
+  trap '' INT TERM
+  cleanup_resources
   exit "$status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 usage() {
   cat <<'EOF'
 Usage: proxyctl [--color auto|always|never] <command> [options]
 
   start [--node NAME]  Start the TUN proxy using a cached node.
+                        Use --lowest-hong-kong for unattended startup.
+  autostart            Start the cached lowest-latency Hong Kong node;
+                        refresh the cache first when it does not exist.
   status [MEASUREMENT] Show service, controller, TUN and cache state.
   nodes                List locally cached usable nodes and cached latency.
   refresh [--restore]  Refresh the subscription and reachable-node cache.
@@ -78,14 +104,27 @@ configure_colors() {
     *) die_usage "invalid color policy '$color_policy'" ;;
   esac
   if [[ $enabled == true ]]; then
-    c_heading=$'\033[38;2;180;214;162m'
-    c_success=$'\033[38;2;143;191;136m'
+    c_heading=$(rgb_escape "${PROXYCTL_COLOR_HEADING:-#B4D6A2}")
+    c_success=$(rgb_escape "${PROXYCTL_COLOR_SUCCESS:-#8FBF88}")
+    c_warning=$(rgb_escape "${PROXYCTL_COLOR_WARNING:-#E6D87A}")
+    c_label=$(rgb_escape "${PROXYCTL_COLOR_LABEL:-#A5B3A2}")
+    c_value=$(rgb_escape "${PROXYCTL_COLOR_VALUE:-#D2DCD0}")
+    c_muted=$(rgb_escape "${PROXYCTL_COLOR_MUTED:-#788A78}")
     c_reset=$'\033[0m'
   else
     c_heading=''
     c_success=''
+    c_warning=''
+    c_label=''
+    c_value=''
+    c_muted=''
     c_reset=''
   fi
+}
+
+rgb_escape() {
+  local hex=${1#\#}
+  printf '\033[38;2;%d;%d;%dm' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
 }
 
 safe_display() {
@@ -94,6 +133,90 @@ safe_display() {
 
 ensure_runtime_dir() {
   install -d -m 0700 -- "$config_dir"
+}
+
+# Public mutations hold this lock through sudo and failure recovery. Internal
+# root helpers use a separate service lock, so sudo does not need inherited FDs
+# or a user-controlled "skip lock" flag.
+lock_operation() {
+  [[ $operation_locked == false ]] || return 0
+  exec {operation_lock_fd}>>"$operation_lock"
+  flock -n "$operation_lock_fd" || {
+    printf '%s\n' 'Another proxy operation is running.' >&2
+    return 1
+  }
+  operation_locked=true
+}
+
+lock_service() {
+  exec {service_lock_fd}>>"$service_lock"
+  flock -n "$service_lock_fd" || {
+    printf '%s\n' 'Another privileged proxy operation is running.' >&2
+    return 1
+  }
+}
+
+resolve_cache() {
+  local snapshot
+  provider_file=$legacy_provider_file
+  nodes_file=$original_nodes_file
+  if [[ -L $cache_dir/current ]]; then
+    snapshot=$(readlink -f -- "$cache_dir/current") || return 1
+    provider_file=$snapshot/provider.yaml
+    nodes_file=$snapshot/nodes.json
+  fi
+}
+
+activate_cache() {
+  local snapshot=$1 pointer
+  pointer=$(mktemp "$cache_dir/.current.XXXXXXXX") || return 1
+  temporary_paths+=("$pointer")
+  ln -sfn -- "$snapshot" "$pointer" || return 1
+  mv -Tf -- "$pointer" "$cache_dir/current" || return 1
+  resolve_cache
+}
+
+ensure_provider_alias() {
+  local target=$cache_dir/current/provider.yaml pointer
+  [[ $(readlink -- "$legacy_provider_file" 2>/dev/null || true) != "$target" ]] || return 0
+  pointer=$(mktemp "$config_dir/.provider.XXXXXXXX") || return 1
+  temporary_paths+=("$pointer")
+  ln -sfn -- "$target" "$pointer" || return 1
+  mv -Tf -- "$pointer" "$legacy_provider_file"
+}
+
+commit_cache() {
+  local provider=$1 nodes=$2 snapshot
+  install -d -m 0700 -- "$cache_dir" || return 1
+  snapshot=$(mktemp -d "$cache_dir/generation.XXXXXXXX") || return 1
+  # Never register a generation for EXIT cleanup: a signal immediately after
+  # pointer publication must not remove the now-visible snapshot. Interrupted
+  # staging may leave a private, unreferenced directory, which is harmless.
+  if ! install -m 0600 -- "$provider" "$snapshot/provider.yaml" ||
+    ! install -m 0600 -- "$nodes" "$snapshot/nodes.json"; then
+    rm -rf -- "$snapshot"
+    return 1
+  fi
+  if [[ $EUID -eq 0 ]]; then
+    chown "$config_owner" -- "$cache_dir" || return 1
+    chown -R "$config_owner" -- "$snapshot" || return 1
+  fi
+  activate_cache "$snapshot" || return 1
+  ensure_provider_alias
+}
+
+prepare_cache() {
+  resolve_cache || return 1
+  if [[ -L $cache_dir/current ]]; then
+    ensure_provider_alias
+    return $?
+  fi
+  [[ -s $provider_file ]] || return 0
+  local nodes
+  nodes=$(mktemp "${TMPDIR:-/tmp}/proxyctl-migrate.XXXXXXXX") || return 1
+  temporary_paths+=("$nodes")
+  cache_json > "$nodes" || return 1
+  commit_cache "$provider_file" "$nodes"
 }
 
 load_secret() {
@@ -159,21 +282,22 @@ fetch_subscription() {
     printf 'Missing subscription file: %s\n' "$subscription_file" >&2
     return 1
   }
-  IFS= read -r url < "$subscription_file"
+  IFS= read -r url < "$subscription_file" || [[ -n $url ]] || return 1
   [[ $url =~ ^https?://[^[:space:]]+$ ]] || {
     printf 'Put one HTTPS Mihomo/Clash subscription URL in %s\n' "$subscription_file" >&2
     return 1
   }
-  raw=$(mktemp "${TMPDIR:-/tmp}/proxyctl-subscription.XXXXXXXX")
-  normalized=$(mktemp "${TMPDIR:-/tmp}/proxyctl-provider.XXXXXXXX")
-  temporary_paths+=("$raw" "$normalized")
+  raw=$(mktemp "${TMPDIR:-/tmp}/proxyctl-subscription.XXXXXXXX") || return 1
+  temporary_paths+=("$raw")
+  normalized=$(mktemp "${TMPDIR:-/tmp}/proxyctl-provider.XXXXXXXX") || return 1
+  temporary_paths+=("$normalized")
   if ! curl --fail --silent --show-error --location --max-time 30 --retry 0 \
     --user-agent 'clash-verge/v1.0' --output "$raw" -- "$url" 2>/dev/null; then
     printf '%s\n' 'Subscription download failed; the credential-bearing URL was hidden.' >&2
     return 1
   fi
   if grep -Eq '^(proxies|proxy-groups):' "$raw"; then
-    sed '/^[[:space:]]*$/d' "$raw" > "$normalized"
+    sed '/^[[:space:]]*$/d' "$raw" > "$normalized" || return 1
   else
     b64=$(tr -d '[:space:]' < "$raw" | tr '_-' '/+')
     case $((${#b64} % 4)) in
@@ -196,16 +320,17 @@ fetch_subscription() {
 
 write_service_config() {
   local node=$1 secret_json temporary_config
-  ensure_runtime_dir
+  ensure_runtime_dir || return 1
   if [[ ! -s $secret_file ]]; then
-    (umask 077; head -c 32 /dev/urandom | base64 | tr -d '\n' > "$secret_file")
-    chown "$config_owner" -- "$secret_file"
+    (umask 077; head -c 32 /dev/urandom | base64 | tr -d '\n' > "$secret_file") || return 1
+    chown "$config_owner" -- "$secret_file" || return 1
   fi
-  secret=$(<"$secret_file")
-  secret_json=$(printf '%s' "$secret" | jq -Rs .)
-  install -d -m 0700 /etc/mihomo
-  temporary_config=$(mktemp /etc/mihomo/config.yaml.XXXXXXXX)
-  cat > "$temporary_config" <<CONFIG
+  secret=$(<"$secret_file") || return 1
+  secret_json=$(printf '%s' "$secret" | jq -Rs .) || return 1
+  install -d -m 0700 /etc/mihomo || return 1
+  temporary_config=$(mktemp /etc/mihomo/config.yaml.XXXXXXXX) || return 1
+  temporary_paths+=("$temporary_config")
+  cat > "$temporary_config" <<CONFIG || return 1
 mode: rule
 log-level: warning
 allow-lan: false
@@ -217,7 +342,7 @@ profile:
   store-selected: true
 tun:
   enable: true
-  interface-name: mihomo
+  device: mihomo
   stack: mixed
   auto-route: true
   auto-redirect: true
@@ -238,7 +363,7 @@ proxy-providers:
     health-check:
       enable: true
       url: $latency_url
-      interval: 300
+      interval: 600
 proxy-groups:
   - name: PROXY
     type: select
@@ -246,8 +371,8 @@ proxy-groups:
 rules:
   - MATCH,PROXY
 CONFIG
-  chmod 0600 "$temporary_config"
-  mv -- "$temporary_config" /etc/mihomo/config.yaml
+  chmod 0600 "$temporary_config" || return 1
+  mv -- "$temporary_config" /etc/mihomo/config.yaml || return 1
   printf '%s\n' "$node" >/dev/null
 }
 
@@ -259,8 +384,10 @@ enable_node() {
     printf '%s\n' 'No valid provider cache; run proxyctl refresh first.' >&2
     return 1
   }
-  write_service_config "$node"
-  systemctl restart mihomo
+  lock_service || return 1
+  resolve_cache || return 1
+  write_service_config "$node" || return 1
+  systemctl restart mihomo || return 1
   local ready=false response body
   for _ in $(seq 1 80); do
     if response=$(api_get /proxies/PROXY 2>/dev/null) &&
@@ -281,24 +408,40 @@ enable_node() {
     printf '%s\n' 'Mihomo rejected the requested node.' >&2
     return 1
   fi
-  printf 'Node: %s\n' "$(safe_display "$node")"
-  printf 'Service: %s\n' "$(systemctl is-active mihomo || true)"
+  local latency
+  latency=$(cached_latency "$node" || true)
+  printf '%sNode%s     %s%s%s\n' "$c_label" "$c_reset" "$c_value" "$(safe_display "$node")" "$c_reset"
+  if [[ -n $latency ]]; then
+    printf '%sLatency%s   %s%s ms%s\n' "$c_label" "$c_reset" "$c_success" "$latency" "$c_reset"
+  fi
+  printf '%sService%s   %s%s%s\n' "$c_label" "$c_reset" "$c_success" "$(systemctl is-active mihomo || true)" "$c_reset"
 }
 
 start_node() {
   local node=$1
   if [[ $EUID -ne 0 ]]; then
-    exec "$sudo_command" -- "$0" __enable "$node"
+    "$sudo_command" -- "$0" __enable "$node"
+    return $?
   fi
   enable_node "$node"
 }
 
 select_node() {
-  local requested=${1:-} cache selection index
+  local requested=${1:-} cache selection index lowest_hong_kong=false
   cache=$(cache_json) || {
     printf '%s\n' 'No usable node cache; run proxyctl refresh first.' >&2
     return 1
   }
+  if [[ $requested == __lowest_hong_kong__ ]]; then
+    lowest_hong_kong=true
+    requested=
+  fi
+  if [[ $lowest_hong_kong == true ]]; then
+    jq -r '[.[] |
+      select(.name | test("香港|Hong[[:space:]_-]*Kong|🇭🇰|(^|[^A-Za-z])HK(G)?([^A-Za-z]|$)"; "i"))] |
+      sort_by(.latency_ms) | .[0].name // empty' <<< "$cache"
+    return 0
+  fi
   if [[ -n $requested ]]; then
     jq -e --arg name "$requested" 'any(.[]; .name == $name)' <<< "$cache" >/dev/null || {
       printf 'Node is not in the local cache: %s\n' "$(safe_display "$requested")" >&2
@@ -317,29 +460,88 @@ select_node() {
 }
 
 start_command() {
-  local requested=
+  local requested='' auto_hong_kong=false
   while (($#)); do
     case $1 in
       --node) (($# >= 2)) || die_usage '--node requires a name'; requested=$2; shift 2 ;;
+      --lowest-hong-kong)
+        [[ -z $requested ]] || die_usage '--node and --lowest-hong-kong are mutually exclusive'
+        auto_hong_kong=true
+        shift
+        ;;
       *) die_usage "unknown start option '$1'" ;;
     esac
   done
+  lock_operation || return 1
+  prepare_cache || return 1
   local node
-  node=$(select_node "$requested") || {
-    local status=$?
-    [[ $status == 130 ]] && printf '%s\n' 'Node selection cancelled.' >&2
-    return "$status"
-  }
+  if [[ $auto_hong_kong == true ]]; then
+    node=$(select_node __lowest_hong_kong__) || {
+      printf '%s\n' 'No Hong Kong node is available in the local cache.' >&2
+      return 1
+    }
+    [[ -n $node ]] || {
+      printf '%s\n' 'No Hong Kong node is available in the local cache.' >&2
+      return 1
+    }
+  else
+    node=$(select_node "$requested") || {
+      local status=$?
+      [[ $status == 130 ]] && printf '%s\n' 'Node selection cancelled.' >&2
+      return "$status"
+    }
+  fi
   start_node "$node"
 }
 
+autostart_command() {
+  (($# == 0)) || die_usage 'autostart takes no arguments'
+  lock_operation || return 1
+  prepare_cache || return 1
+  if ! cache_json >/dev/null 2>&1; then
+    [[ -r $subscription_file ]] || {
+      printf 'Missing subscription file: %s\n' "$subscription_file" >&2
+      return 1
+    }
+    printf '%s\n' 'Autostart: no node cache; refreshing the subscription.' >&2
+    local refreshed=false
+    for _ in 1 2 3; do
+      if refresh_command; then
+        refreshed=true
+        break
+      fi
+      sleep 2
+    done
+    [[ $refreshed == true ]] || {
+      printf '%s\n' 'Autostart: subscription refresh failed.' >&2
+      return 1
+    }
+  fi
+  start_command --lowest-hong-kong
+}
+
+cached_latency() {
+  local node=$1 cache
+  cache=$(cache_json) || return 1
+  jq -r --arg node "$node" 'map(select(.name == $node)) | .[0].latency_ms // empty' <<< "$cache"
+}
+
 nodes_command() {
-  (($# == 0)) || die_usage 'nodes takes no arguments'
+  local json=false
+  if [[ ${1:-} == --json && $# == 1 ]]; then
+    json=true
+  else
+    (($# == 0)) || die_usage 'nodes accepts only --json'
+  fi
   local cache
   cache=$(cache_json) || {
     printf '%s\n' 'No usable node cache; run proxyctl refresh first.' >&2
     return 1
   }
+  if [[ $json == true ]]; then
+    printf '%s\n' "$cache"
+    return 0
+  fi
   printf '%-10s  %s\n' 'LATENCY' 'NODE'
   jq -r '.[] | [((.latency_ms | tostring) + " ms"),
     (.name | gsub("[\\x00-\\x1F\\x7F]"; "?"))] | @tsv' <<< "$cache" |
@@ -347,6 +549,14 @@ nodes_command() {
 }
 
 refresh_command() {
+  local status=0
+  refresh_transaction "$@" || status=$?
+  # Retry callers must not carry a probe process/port into the next attempt.
+  cleanup_resources
+  return "$status"
+}
+
+refresh_transaction() {
   local restore=false
   while (($#)); do
     case $1 in
@@ -354,8 +564,14 @@ refresh_command() {
       *) die_usage "unknown refresh option '$1'" ;;
     esac
   done
-  ensure_runtime_dir
-  local was_active=false previous_node='' temporary_dir probe_pid response total reachable failed
+  lock_operation || return 1
+  ensure_runtime_dir || return 1
+  prepare_cache || return 1
+  previous_cache=
+  if [[ -L $cache_dir/current ]]; then
+    previous_cache=$(readlink -f -- "$cache_dir/current") || return 1
+  fi
+    local was_active=false previous_node='' temporary_dir probe_pid response total reachable failed
   if systemctl is-active --quiet mihomo; then
     was_active=true
     [[ $restore == true ]] || {
@@ -372,15 +588,15 @@ refresh_command() {
     restore_pending=true
     restore_node=$previous_node
     printf '%s\n' 'Stopping the active proxy; it will be restored after refresh.' >&2
-    "$sudo_command" systemctl stop mihomo
+    "$sudo_command" systemctl stop mihomo || return 1
   fi
 
-  temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/proxyctl-refresh.XXXXXXXX")
+  temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/proxyctl-refresh.XXXXXXXX") || return 1
   temporary_paths+=("$temporary_dir")
   printf '%s\n' 'Fetch: downloading subscription ...' >&2
-  fetch_subscription "$temporary_dir/provider.yaml"
+  fetch_subscription "$temporary_dir/provider.yaml" || return 1
   printf '%s\n' 'Parse: subscription normalized.' >&2
-  cat > "$temporary_dir/config.yaml" <<CONFIG
+  cat > "$temporary_dir/config.yaml" <<CONFIG || return 1
 mixed-port: 17890
 external-controller: 127.0.0.1:59777
 log-level: warning
@@ -400,6 +616,7 @@ CONFIG
   background_pids+=("$probe_pid")
   local ready=false
   for _ in $(seq 1 40); do
+    kill -0 "$probe_pid" 2>/dev/null || break
     if curl --fail --silent --connect-timeout 1 --max-time 1 --retry 0 \
       http://127.0.0.1:59777/version >/dev/null 2>&1; then
       ready=true
@@ -411,8 +628,12 @@ CONFIG
     printf '%s\n' 'Probe: temporary Mihomo controller did not start.' >&2
     return 1
   }
+  kill -0 "$probe_pid" 2>/dev/null || {
+    printf "%s\n" "Probe: temporary Mihomo exited before becoming ready." >&2
+    return 1
+  }
   total=$(curl --fail --silent --connect-timeout 2 --max-time 5 --retry 0 \
-    http://127.0.0.1:59777/proxies/PROBE | jq '.all | length')
+    http://127.0.0.1:59777/proxies/PROBE | jq -e '.all | length') || return 1
   printf 'Probe: testing %s nodes ...\n' "$total" >&2
   response=$(curl --fail --silent --show-error -G --connect-timeout 2 --max-time 90 --retry 0 \
     --data-urlencode "url=$latency_url" --data-urlencode 'timeout=5000' \
@@ -421,28 +642,27 @@ CONFIG
     return 1
   }
   jq '[to_entries[] | select(.value | type == "number" and . > 0) |
-    {name: .key, latency_ms: .value, us: (.key | test("美国|🇺🇲|(^|[^A-Za-z])US([^A-Za-z]|$)"; "i"))}] |
-    sort_by(if .us then 0 else 1 end, .latency_ms) |
-    map(del(.us))' <<< "$response" > "$temporary_dir/nodes.json"
-  reachable=$(jq 'length' "$temporary_dir/nodes.json")
+    {name: .key, latency_ms: .value,
+     hk: (.key | test("香港|Hong[[:space:]_-]*Kong|🇭🇰|(^|[^A-Za-z])HK(G)?([^A-Za-z]|$)"; "i"))}] |
+    sort_by(if .hk then 0 else 1 end, .latency_ms) |
+    map(del(.hk))' <<< "$response" > "$temporary_dir/nodes.json" || return 1
+  reachable=$(jq 'length' "$temporary_dir/nodes.json") || return 1
   failed=$((total - reachable))
   ((reachable > 0)) || {
     printf 'Probe: 0 reachable, %s failed; old cache preserved.\n' "$failed" >&2
     return 1
   }
+  if [[ $was_active == true ]] && ! jq -e --arg node "$previous_node" \
+    'any(.[]; .name == $node)' "$temporary_dir/nodes.json" >/dev/null; then
+    printf '%s\n' 'The active node is no longer reachable; old cache preserved.' >&2
+    return 1
+  fi
 
-  local provider_target nodes_target
-  provider_target=$(mktemp "$config_dir/.provider.yaml.XXXXXXXX")
-  nodes_target=$(mktemp "$config_dir/.nodes.json.XXXXXXXX")
-  temporary_paths+=("$provider_target" "$nodes_target")
-  install -m 0600 "$temporary_dir/provider.yaml" "$provider_target"
-  install -m 0600 "$temporary_dir/nodes.json" "$nodes_target"
-  mv -- "$provider_target" "$provider_file"
-  mv -- "$nodes_target" "$nodes_file"
+  commit_cache "$temporary_dir/provider.yaml" "$temporary_dir/nodes.json" || return 1
   printf 'Cache: wrote %s reachable nodes; %s failed.\n' "$reachable" "$failed" >&2
 
   if [[ $was_active == true ]]; then
-    "$sudo_command" -- "$0" __enable "$previous_node"
+    "$sudo_command" -- "$0" __enable "$previous_node" || return 1
     restore_pending=false
     printf 'Service: restored node %s.\n' "$(safe_display "$previous_node")" >&2
   else
@@ -519,7 +739,7 @@ status_command() {
   [[ $json == false || $color_policy != always ]] || color_policy=never
   configure_colors
 
-  local service_state controller_state=not-queried node='' tun_state=absent
+  local service_state controller_state=not-queried node='' node_latency=null tun_state=absent
   local cache_count=0 cache_age=null operational_failure=false response measurement_json=null
   service_state=$(systemctl is-active mihomo 2>/dev/null || true)
   [[ -n $service_state ]] || service_state=unknown
@@ -531,6 +751,10 @@ status_command() {
     if load_secret && response=$(api_get /proxies/PROXY 2>/dev/null); then
       controller_state=reachable
       node=$(jq -r '.now // empty' <<< "$response")
+      if [[ -n $node ]]; then
+        node_latency=$(cached_latency "$node" || true)
+        [[ -n $node_latency ]] || node_latency=null
+      fi
     else
       controller_state=unreachable
       operational_failure=true
@@ -564,22 +788,31 @@ status_command() {
 
   if [[ $json == true ]]; then
     jq -cn --arg service "$service_state" --arg controller "$controller_state" \
-      --arg node "$node" --arg tun "$tun_state" --argjson cache_count "$cache_count" \
+      --arg node "$node" --arg tun "$tun_state" --argjson node_latency "$node_latency" \
+      --argjson cache_count "$cache_count" \
       --argjson cache_age "$cache_age" --argjson measurement "$measurement_json" \
       '{timestamp:(now | todateiso8601), service:$service, controller:$controller,
-        mode:"rule", node:(if $node == "" then null else $node end), tun:$tun,
+        mode:"rule", node:(if $node == "" then null else $node end),
+        node_latency_ms:$node_latency, tun:$tun,
         cache:{usable_nodes:$cache_count, age_seconds:$cache_age}, measurement:$measurement}'
   else
     printf '%sKoru Proxy%s\n' "$c_heading" "$c_reset"
-    printf '  Service       %s%s%s\n' "$c_success" "$service_state" "$c_reset"
-    printf '  Controller    %s\n' "$controller_state"
-    printf '  Mode          rule (all traffic routed to PROXY)\n'
-    if [[ -n $node ]]; then printf '  Node          %s\n' "$(safe_display "$node")"; else printf '  Node          unavailable\n'; fi
-    printf '  TUN           %s\n' "$tun_state"
-    if [[ $cache_age != null ]]; then
-      printf '  Node cache    %s usable nodes, refreshed %s ago\n' "$cache_count" "$(format_age "$cache_age")"
+    printf '  %sService%s       %s%s%s\n' "$c_label" "$c_reset" "$c_success" "$service_state" "$c_reset"
+    printf '  %sController%s    %s%s%s\n' "$c_label" "$c_reset" "$c_value" "$controller_state" "$c_reset"
+    printf '  %sMode%s          %srule · global TUN%s\n' "$c_label" "$c_reset" "$c_value" "$c_reset"
+    if [[ -n $node ]]; then
+      printf '  %sNode%s          %s%s%s\n' "$c_label" "$c_reset" "$c_value" "$(safe_display "$node")" "$c_reset"
     else
-      printf '  Node cache    unavailable\n'
+      printf '  %sNode%s          %sunavailable%s\n' "$c_label" "$c_reset" "$c_warning" "$c_reset"
+    fi
+    if [[ $node_latency != null ]]; then
+      printf '  %sCached delay%s  %s%s ms%s\n' "$c_label" "$c_reset" "$c_success" "$node_latency" "$c_reset"
+    fi
+    printf '  %sTUN%s           %s%s%s\n' "$c_label" "$c_reset" "$c_value" "$tun_state" "$c_reset"
+    if [[ $cache_age != null ]]; then
+      printf '  %sNode cache%s    %s%s usable nodes, refreshed %s ago%s\n' "$c_label" "$c_reset" "$c_muted" "$cache_count" "$(format_age "$cache_age")" "$c_reset"
+    else
+      printf '  %sNode cache%s    %sunavailable%s\n' "$c_label" "$c_reset" "$c_warning" "$c_reset"
     fi
     case $measurement in
       none) printf '  Latency       not measured (use --latency)\n' ;;
@@ -620,10 +853,13 @@ status_command() {
 
 shutdown_command() {
   (($# == 0)) || die_usage 'shutdown takes no arguments'
+  lock_operation || return 1
   if [[ $EUID -ne 0 ]]; then
-    exec "$sudo_command" -- "$0" __shutdown
+    "$sudo_command" -- "$0" __shutdown
+    return $?
   fi
-  systemctl stop mihomo
+  lock_service || return 1
+  systemctl stop mihomo || return 1
   printf 'Service: %s\n' "$(systemctl is-active mihomo || true)"
 }
 
@@ -645,8 +881,10 @@ configure_colors
 (($# >= 1)) || die_usage 'a command is required'
 command_name=$1
 shift
+resolve_cache
 case $command_name in
   start) start_command "$@" ;;
+  autostart) autostart_command "$@" ;;
   status) status_command "$@" ;;
   nodes) nodes_command "$@" ;;
   refresh) refresh_command "$@" ;;
@@ -656,6 +894,7 @@ case $command_name in
   __enable) enable_node "$@" ;;
   __shutdown)
     [[ $EUID -eq 0 && $# == 0 ]] || die_usage 'invalid internal shutdown request'
+    lock_service || exit 1
     systemctl stop mihomo
     printf 'Service: %s\n' "$(systemctl is-active mihomo || true)"
     ;;

@@ -2,6 +2,7 @@
 
 _proxyctl_nodes() {
   local cache=${PROXYCTL_NODES_FILE:-$HOME/.config/mihomo/nodes.json}
+  [[ ! -r $HOME/.config/mihomo/cache/current/nodes.json ]] || cache=$HOME/.config/mihomo/cache/current/nodes.json
   local name description
   local -a names descriptions
   if [[ -r $cache ]] && (( $+commands[jq] )); then
