@@ -28,6 +28,7 @@
     gtk = true;
     imv = true;
     jq = true;
+    kitty = true;
     libreoffice = true;
     neovim = true;
     niri = true;
