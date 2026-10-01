@@ -166,6 +166,7 @@
           };
 
           checks = {
+            proxy-lifecycle = import ./tests/proxyctl/vm.nix { inherit pkgs; };
             formatting =
               pkgs.runCommand "check-formatting"
                 {
