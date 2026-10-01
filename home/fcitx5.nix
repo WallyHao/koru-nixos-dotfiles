@@ -8,7 +8,7 @@ let
   panel-svg = pkgs.writeText "panel.svg" ''
     <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
       <rect x="3" y="3" width="74" height="74" rx="12" ry="12" fill="${theme.bg}"/>
-      <rect x="3" y="3" width="74" height="74" rx="12" ry="12" fill="none" stroke="${theme.border}" stroke-width="2"/>
+      <rect x="3" y="3" width="74" height="74" rx="12" ry="12" fill="none" stroke="${theme.accent-yellow}" stroke-width="2"/>
     </svg>
   '';
 
@@ -71,15 +71,17 @@ in
     [Metadata]
     Name=Koru Fern
     Version=1
-    Author=wallyhao
+    Author=koru
     Description=Dark fern theme with a subdued border
 
     [InputPanel]
     NormalColor=${theme.fg}
-    HighlightCandidateColor=${theme.cursor}
-    HighlightColor=${theme.cursor}
-    HighlightBackgroundColor=${theme.accent-bg}
-    FullWidthHighlight=True
+    # Keep the selected candidate readable through text color only; the
+    # transparent highlight removes the selection box/background.
+    HighlightCandidateColor=${theme.accent-yellow}
+    HighlightColor=${theme.accent-yellow}
+    HighlightBackgroundColor=#00000000
+    FullWidthHighlight=False
 
     [InputPanel/Background]
     Image=panel.png
@@ -95,9 +97,9 @@ in
 
     [InputPanel/Highlight]
     Image=
-    Color=${theme.accent-bg}
-    BorderColor=${theme.accent}
-    BorderWidth=1
+    Color=#00000000
+    BorderColor=#ffffff00
+    BorderWidth=0
 
     [InputPanel/Highlight/Margin]
     Left=8
