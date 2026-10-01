@@ -13,6 +13,7 @@
   lib,
   pkgs,
   theme,
+  enabled,
   ...
 }:
 let
@@ -20,6 +21,7 @@ let
   # alias would map to Super on a TTY.
   modifier = "Alt";
   power-profile = "/run/current-system/sw/bin/power-profile";
+  proxyctl = "/run/current-system/sw/bin/proxyctl";
   brightnessctl = lib.getExe pkgs.brightnessctl;
   menu = "wmenu-frecency";
 in
@@ -101,7 +103,7 @@ in
         border = {
           on = { };
           width = 2;
-          active-color = theme.accent;
+          active-color = theme.accent-yellow;
           inactive-color = theme.border;
           urgent-color = theme.urgent;
         };
@@ -115,41 +117,86 @@ in
         ];
       };
 
-      # Named workspace "scratch" is the dedicated slot 0. niri has no stable
-      # numeric workspaces and `focus-workspace N` clamps to the last existing
-      # one, which is why the old command left btop on workspace 1. The btop
-      # window is placed here by app-id (set via alacritty --class) and given
-      # the full screen width, since niri's default column is half a screen.
+      # A single workspace ("scratch") holds the startup dashboard. fastfetch
+      # opens first and btop opens second, so niri keeps fastfetch on btop's
+      # left; btop keeps its full-width column. Named workspaces avoid relying
+      # on numeric workspace positions while the desktop is still being
+      # assembled.
       #
-      # Startup entries. fcitx5 has no systemd user unit; power-profile applies
-      # the AC/battery screen profile.
+      # Optional dashboard entries follow their software switches.
+      # Startup entries. Proxy bootstrap runs in the background without a
+      # window, so it neither steals focus nor adds a report column.
       _children = [
         { workspace._args = [ "scratch" ]; }
+        { spawn-at-startup = [ power-profile ]; }
         {
-          window-rule._children = [
-            {
-              match._props = {
-                app-id = "(?i)^btop$";
-              };
-            }
-            { open-on-workspace = "scratch"; }
-            { default-column-width._children = [ { proportion = 1.0; } ]; }
+          spawn-at-startup = [
+            proxyctl
+            "autostart"
           ];
         }
+      ]
+      ++ lib.optionals (enabled.enable.fcitx5 or false) [
         {
           spawn-at-startup = [
             "fcitx5"
             "-d"
           ];
         }
-        { spawn-at-startup = [ power-profile ]; }
+      ]
+      ++
+        lib.optionals
+          (
+            (enabled.enable.kitty or false)
+            && (enabled.enable.fastfetch or false)
+            && (enabled.enable.zsh or false)
+          )
+          [
+            {
+              window-rule._children = [
+                { match._props.app-id = "(?i)^koru-fetch$"; }
+                { open-on-workspace = "scratch"; }
+                { default-column-width._children = [ { proportion = 0.5; } ]; }
+              ];
+            }
+            {
+              spawn-at-startup = [
+                "kitty"
+                "--class"
+                "koru-fetch"
+                "-e"
+                "zsh"
+                "-lc"
+                "fastfetch; exec zsh -i"
+              ];
+            }
+          ]
+      ++ lib.optionals ((enabled.enable.kitty or false) && (enabled.enable.btop or false)) [
+        {
+          window-rule._children = [
+            { match._props.app-id = "(?i)^btop$"; }
+            { open-on-workspace = "scratch"; }
+            { default-column-width._children = [ { proportion = 1.0; } ]; }
+          ];
+        }
         {
           spawn-at-startup = [
-            "alacritty"
+            "kitty"
             "--class"
             "btop"
             "-e"
             "btop"
+          ];
+        }
+      ]
+      ++ [
+        {
+          spawn-at-startup = [
+            "niri"
+            "msg"
+            "action"
+            "focus-workspace"
+            "scratch"
           ];
         }
       ];
@@ -161,6 +208,7 @@ in
           modifier
           menu
           brightnessctl
+          enabled
           ;
       };
     };

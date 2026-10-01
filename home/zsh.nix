@@ -11,6 +11,7 @@
   lib,
   pkgs,
   theme,
+  enabled,
   ...
 }:
 let
@@ -119,19 +120,20 @@ in
       custom = "${pkgs.zsh-powerlevel10k}/share/zsh";
     };
     shellAliases = {
-      # bat (installed by programs.bat); catp prints without line numbers/header.
+      nixos-system-rebuild = "nosr";
+      nixos-homemanager-update = "nohm";
+    }
+    // lib.optionalAttrs (enabled.enable.bat or false) {
       cat = "bat";
       catp = "bat -pp";
-      # eza tree views. l/ls show the current directory level only (depth 0,
-      # folders not expanded); the ll/lt helpers below take an optional depth.
-      # --group-directories-first keeps directories above files (mixing them
-      # by name makes the listing hard to scan).
+    }
+    // lib.optionalAttrs (enabled.enable.eza or false) {
       l = "eza --tree --group-directories-first -L 1";
       ls = "eza --tree --group-directories-first --long -L 1";
       la = "eza -la --tree --group-directories-first -L 1";
-      # Compatibility aliases delegate to the documented repository recipes.
-      nixos-system-rebuild = "just --justfile ~/.config/nixos/Justfile system-configuration-switch";
-      nixos-homemanager-update = "just --justfile ~/.config/nixos/Justfile home-configuration-switch";
+    }
+    // lib.optionalAttrs (enabled.enable.fastfetch or false) {
+      fetch = "fastfetch";
     };
 
     # Quality-of-life shell options (applied after oh-my-zsh, so they win).
@@ -148,120 +150,138 @@ in
       "INTERACTIVE_COMMENTS"
     ];
 
-    initContent = lib.mkAfter ''
-      # API keys / secrets (chmod 600, not tracked by git). Sourced here, in
-      # .zshrc, which runs before .zlogin's `exec niri-session`; niri and every
-      # child (opencode, ...) inherit the exported vars.
-      [ -r "$HOME/.config/zsh/secrets.env" ] && source "$HOME/.config/zsh/secrets.env"
+    initContent = lib.mkMerge [
+      (lib.mkOrder 550 ''
+        # Profile completions follow its installed generation, including rollback.
+        # Register before compinit/Oh My Zsh; no package installation is owned here.
+        fpath=("''${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles/koru-dev/share/zsh/site-functions" $fpath)
+      '')
+      (lib.mkAfter ''
+        # API keys / secrets (chmod 600, not tracked by git). Sourced here, in
+        # .zshrc, which runs before .zlogin's `exec niri-session`; niri and every
+        # child (opencode, ...) inherit the exported vars.
+        [ -r "$HOME/.config/zsh/secrets.env" ] && source "$HOME/.config/zsh/secrets.env"
 
-      # Large, shared history (SHARE_HISTORY is set via setOptions above).
-      HISTSIZE=100000
-      SAVEHIST=100000
+        # Large, shared history (SHARE_HISTORY is set via setOptions above).
+        HISTSIZE=100000
+        SAVEHIST=100000
 
-      # Use bat as the man-page pager (col strips overstrike/backspaces).
-      export MANPAGER="sh -c '${pkgs.util-linux}/bin/col -bx | ${pkgs.bat}/bin/bat -l man -p'"
-      export MANROFFOPT="-c"
+        ${lib.optionalString (enabled.enable.bat or false) ''
+          # Use bat as the man-page pager (col strips overstrike/backspaces).
+          export MANPAGER="sh -c '${pkgs.util-linux}/bin/col -bx | ${pkgs.bat}/bin/bat -l man -p'"
+          export MANROFFOPT="-c"
+        ''}
 
-      # powerlevel10k (sourced after oh-my-zsh sets the theme)
-      source ${config.home.homeDirectory}/.p10k.zsh
+        # powerlevel10k (sourced after oh-my-zsh sets the theme)
+        source ${config.home.homeDirectory}/.p10k.zsh
 
-      # Re-theme p10k to the global Koru Fern palette (system/theme.nix). Set after
-      # the wizard config so these win, then force p10k to re-init.
-      ${p10kOverrideLines}
-      (( ! $+functions[p10k] )) || p10k reload
+        # Re-theme p10k to the global Koru Fern palette (system/theme.nix). Set after
+        # the wizard config so these win, then force p10k to re-init.
+        ${p10kOverrideLines}
+        (( ! $+functions[p10k] )) || p10k reload
 
-      # Rebuild helpers delegate to the same recipes as the long aliases.
-      nosr() { just --justfile ~/.config/nixos/Justfile system-configuration-switch "$@"; }
-      nohm() { just --justfile ~/.config/nixos/Justfile home-configuration-switch "$@"; }
+        # Rebuild helpers: optional host (default koru).
+        nosr() { "$HOME/.config/nixos/scripts/maintenance.sh" system-configuration switch "''${1:-koru}"; }
+        nohm() { "$HOME/.config/nixos/scripts/maintenance.sh" home-configuration switch "''${1:-koru}"; }
 
-      # Convert a doc/ppt (docx/pptx/odt/odp/...) to PDF with headless
-      # LibreOffice (installed by home/libreoffice.nix).
-      #   topdf <input> <target>
-      # <target> is either an existing directory (or a path ending in "/"),
-      # where the PDF keeps the input's basename, or a full output path that
-      # renames it. LibreOffice always names the result after the input, so
-      # convert into a private temp dir and move the file to the target; the
-      # private profile also avoids clashing with a running LibreOffice.
-      topdf() {
-        if [ "$#" -ne 2 ]; then
-          echo "usage: topdf <input> <target-dir-or-pdf-path>" >&2
-          return 2
-        fi
-        local input="$1" target="$2" outdir outname tmp stem
-        [ -f "$input" ] || { echo "topdf: no such file: $input" >&2; return 1; }
-        input="$(realpath "$input")"
-        stem="$(basename "$input")"; stem="''${stem%.*}"
-        if [ -d "$target" ] || [ "''${target%/}" != "$target" ]; then
-          outdir="$target"; outname="$stem.pdf"
-        else
-          outdir="$(dirname "$target")"; outname="$(basename "$target")"
-        fi
-        mkdir -p "$outdir"
-        tmp="$(mktemp -d)" || return 1
-        soffice --headless \
-          "-env:UserInstallation=file://$tmp/profile" \
-          --convert-to pdf --outdir "$tmp" "$input" >/dev/null
-        if [ -f "$tmp/$stem.pdf" ]; then
-          mv -f "$tmp/$stem.pdf" "$outdir/$outname"
-          echo "$outdir/$outname"
-        else
-          echo "topdf: conversion failed: $input" >&2
-          rm -rf "$tmp"
-          return 1
-        fi
-        rm -rf "$tmp"
-      }
+        ${lib.optionalString (enabled.enable.libreoffice or false) ''
+          # Convert a doc/ppt (docx/pptx/odt/odp/...) to PDF with headless
+          # LibreOffice (installed by home/libreoffice.nix).
+          #   topdf <input> <target>
+          # <target> is either an existing directory (or a path ending in "/"),
+          # where the PDF keeps the input's basename, or a full output path that
+          # renames it. LibreOffice always names the result after the input, so
+          # convert into a private temp dir and move the file to the target; the
+          # private profile also avoids clashing with a running LibreOffice.
+          topdf() {
+            if [ "$#" -ne 2 ]; then
+              echo "usage: topdf <input> <target-dir-or-pdf-path>" >&2
+              return 2
+            fi
+            local input="$1" target="$2" outdir outname tmp stem
+            [ -f "$input" ] || { echo "topdf: no such file: $input" >&2; return 1; }
+            input="$(realpath "$input")"
+            stem="$(basename "$input")"; stem="''${stem%.*}"
+            if [ -d "$target" ] || [ "''${target%/}" != "$target" ]; then
+              outdir="$target"; outname="$stem.pdf"
+            else
+              outdir="$(dirname "$target")"; outname="$(basename "$target")"
+            fi
+            mkdir -p "$outdir"
+            tmp="$(mktemp -d)" || return 1
+            soffice --headless \
+              "-env:UserInstallation=file://$tmp/profile" \
+              --convert-to pdf --outdir "$tmp" "$input" >/dev/null
+            if [ -f "$tmp/$stem.pdf" ]; then
+              mv -f "$tmp/$stem.pdf" "$outdir/$outname"
+              echo "$outdir/$outname"
+            else
+              echo "topdf: conversion failed: $input" >&2
+              rm -rf "$tmp"
+              return 1
+            fi
+            rm -rf "$tmp"
+          }
+        ''}
 
-      # Open a file/folder in Zen (the browser installed by home/zen-browser.nix, binary
-      # zen-beta) in a NEW window (never a new tab). Kept in sync with the
-      # Alt+l bind in home/niri.nix, which also spawns zen-beta.
-      # Usage: f [file-or-path]  (defaults to the current directory)
-      f() {
-        if [ -z "$1" ]; then
-          zen-beta --new-window "file://$PWD"
-        else
-          case "$1" in
-            /*) local url="file://$1" ;;
-            *)  local url="file://$PWD/$1" ;;
-          esac
-          zen-beta --new-window "$url"
-        fi
-      }
+        ${lib.optionalString (enabled.enable.zen-browser or false) ''
+          # Open a file/folder in Zen (the browser installed by home/zen-browser.nix, binary
+          # zen-beta) in a NEW window (never a new tab). Kept in sync with the
+          # Alt+l bind in home/niri.nix, which also spawns zen-beta.
+          # Usage: f [file-or-path]  (defaults to the current directory)
+          f() {
+            if [ -z "$1" ]; then
+              zen-beta --new-window "file://$PWD"
+            else
+              case "$1" in
+                /*) local url="file://$1" ;;
+                *)  local url="file://$PWD/$1" ;;
+              esac
+              zen-beta --new-window "$url"
+            fi
+          }
+        ''}
 
-      # eza tree helpers that take an optional depth as the first argument:
-      #   ll [depth] [path]   detailed tree, default depth 1
-      #   lt [depth] [path]   compact tree,  default depth 5
-      unalias ll lt 2>/dev/null
-      ll() {
-        local d=1
-        if [[ "$1" == <-> ]]; then d="$1"; shift; fi
-        eza --tree --group-directories-first --long -L "$d" "$@"
-      }
-      lt() {
-        local d=5
-        if [[ "$1" == <-> ]]; then d="$1"; shift; fi
-        eza --tree --group-directories-first -L "$d" "$@"
-      }
+        ${lib.optionalString (enabled.enable.eza or false) ''
+          # eza tree helpers that take an optional depth as the first argument:
+          #   ll [depth] [path]   detailed tree, default depth 1
+          #   lt [depth] [path]   compact tree,  default depth 5
+          unalias ll lt 2>/dev/null
+          ll() {
+            local d=1
+            if [[ "$1" == <-> ]]; then d="$1"; shift; fi
+            eza --tree --group-directories-first --long -L "$d" "$@"
+          }
+          lt() {
+            local d=5
+            if [[ "$1" == <-> ]]; then d="$1"; shift; fi
+            eza --tree --group-directories-first -L "$d" "$@"
+          }
+        ''}
 
-      # fzf widgets on three consecutive home-row keys, under Win (Super).
-      # Super does not reach the shell on its own, so alacritty converts
-      # Win+J/K/L into ESC j/k/l (Meta) - see home/alacritty.nix.
-      # Ctrl+J/K/L are restored to their zsh defaults.
-      #   Win+J history, Win+K files, Win+L dirs
-      bindkey -r '^R';  bindkey '^R'  history-incremental-search-backward
-      bindkey -r '^T';  bindkey '^T'  transpose-chars
-      bindkey -r '^[c'; bindkey '^[c' capitalize-word
-      bindkey '^J' accept-line
-      bindkey '^K' kill-line
-      bindkey '^L' clear-screen
-      bindkey '^[j' fzf-history-widget
-      bindkey '^[k' fzf-file-widget
-      bindkey '^[l' fzf-cd-widget
+        ${lib.optionalString (enabled.enable.fzf or false) ''
+          # fzf widgets on three consecutive home-row keys, under Win (Super).
+          # Super does not reach the shell on its own, so Kitty converts Win+J/K/L
+          # into ESC j/k/l (Meta) - see home/kitty.nix.
+          # Ctrl+J/K/L are restored to their zsh defaults.
+          #   Win+J history, Win+K files, Win+L dirs
+          bindkey -r '^R';  bindkey '^R'  history-incremental-search-backward
+          bindkey -r '^T';  bindkey '^T'  transpose-chars
+          bindkey -r '^[c'; bindkey '^[c' capitalize-word
+          bindkey '^J' accept-line
+          bindkey '^K' kill-line
+          bindkey '^L' clear-screen
+          bindkey '^[j' fzf-history-widget
+          bindkey '^[k' fzf-file-widget
+          bindkey '^[l' fzf-cd-widget
 
-      # fzf's own zsh integration (sourced earlier as `fzf --zsh`) also claims
-      # Tab for its `fzf-completion` widget, shadowing the fzf-tab plugin that
-      # Home Manager loaded above. Hand Tab back to fzf-tab.
-      bindkey '^I' fzf-tab-complete
-    '';
+          # fzf's own zsh integration (sourced earlier as `fzf --zsh`) also claims
+          # Tab for its `fzf-completion` widget, shadowing the fzf-tab plugin that
+          # Home Manager loaded above. Hand Tab back to fzf-tab.
+          bindkey '^I' fzf-tab-complete
+        ''}
+
+      '')
+    ];
   };
 }

@@ -11,7 +11,7 @@
 # flag with no file, fails evaluation instead of being dropped silently.
 {
   enable = {
-    alacritty = true;
+    alacritty = false;
     bat = true;
     btop = true;
     chsrc = true;
