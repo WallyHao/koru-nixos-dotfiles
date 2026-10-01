@@ -5,8 +5,8 @@
 These apply to every task, regardless of project.
 
 ### System
-- NixOS 26.11 (nixos-unstable), host `koru`, user `wallyhao`.
-- Desktop is Niri (Alt = Mod1); terminal alacritty; editor nvim.
+- NixOS 26.11 (nixos-unstable), host `koru`, user `koru`.
+- Desktop is Niri (Alt = Mod1); terminal Kitty; editor nvim.
 - Network is mainland China with NO VPN.
 
 ### Before choosing a tool
@@ -74,11 +74,11 @@ under `~/.config/nixos` or `~/Workspace/nixos`. Ignore it for unrelated work.
 
 ### The switchboard
 
-- `home/module-selection.nix` is the single switchboard: a flat `enable` map
+- `home/modules-enables.nix` is the single switchboard: a flat `enable` map
   with one boolean per home module (`true` installs it, `false` keeps its file
   unused, and it doubles as the inventory). Keys and the `home/*.nix` modules
   must match in both directions (asserted in `home/default.nix`).
-- The two control files `home/default.nix` and `home/module-selection.nix` are
+- The two control files `home/default.nix` and `home/modules-enables.nix` are
   skipped by discovery; every other `home/*.nix` is a module.
 - Only the user layer can be switched at runtime; `system/` needs a rebuild.
 
