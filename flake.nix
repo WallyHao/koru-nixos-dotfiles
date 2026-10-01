@@ -160,6 +160,7 @@
               deadnix
               jq
               nixfmt
+              ripgrep
               shellcheck
               statix
             ];
