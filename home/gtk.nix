@@ -17,8 +17,8 @@
 let
   # libadwaita named colors, used by both adw-gtk3 (GTK3) and GTK4.
   colors = ''
-    @define-color accent_color ${theme.accent};
-    @define-color accent_bg_color ${theme.accent};
+    @define-color accent_color ${theme.accent-yellow};
+    @define-color accent_bg_color ${theme.accent-yellow};
     @define-color accent_fg_color ${theme.black};
     @define-color window_bg_color ${theme.bg};
     @define-color window_fg_color ${theme.fg};

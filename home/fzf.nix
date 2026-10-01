@@ -42,8 +42,8 @@ let
   # fzf --color spec, shared by the main fzf (programs.fzf.colors below) and
   # fzf-tab. fzf-tab gets it as an explicit CLI flag because relying on it
   # inheriting FZF_DEFAULT_OPTS proved unreliable.
-  # Fern green is the restrained identity accent used for focus, matches and
-  # selection markers while semantic ANSI colors keep their distinct roles.
+  # Fern green remains the identity color; soft yellow marks focus and prompts
+  # so the completion UI has a second visual rhythm.
   fzfColors = lib.concatStringsSep "," [
     "bg:${theme.bg}"
     "bg+:${theme.bg-alt}"
@@ -52,14 +52,14 @@ let
     "hl:${theme.ansi.green}"
     "hl+:${theme.ansi-bright.green}"
     "info:${theme.ansi.green}"
-    "prompt:${theme.accent}"
-    "pointer:${theme.accent}"
-    "marker:${theme.ansi-bright.green}"
-    "spinner:${theme.accent}"
+    "prompt:${theme.accent-yellow}"
+    "pointer:${theme.accent-yellow}"
+    "marker:${theme.accent-yellow-bright}"
+    "spinner:${theme.accent-yellow}"
     "scrollbar:${theme.accent}"
     "header:${theme.muted}"
     "border:${theme.accent}"
-    "label:${theme.accent}"
+    "label:${theme.accent-yellow}"
     "query:${theme.fg-bright}"
     "disabled:${theme.muted-alt}"
     "gutter:${theme.bg}"
@@ -124,10 +124,10 @@ let
     "*.pdf=${rgb theme.urgent}"
   ];
   # fzf-tab colors each group (and the completion description that trails the
-  # candidate) with these; all use the fern accent so the right-side annotation
-  # matches niri's accent. fzf-tab indexes directly by group number, so provide
+  # candidate) with these; yellow keeps annotations distinct from the green
+  # matches. fzf-tab indexes directly by group number, so provide
   # 16.
-  groupColors = lib.concatStringsSep " " (lib.replicate 16 (fg24 theme.accent));
+  groupColors = lib.concatStringsSep " " (lib.replicate 16 (fg24 theme.accent-yellow));
 in
 {
   # fzf-tab defaults to its own (unthemed) fzf palette. Pass the palette both
@@ -158,14 +158,14 @@ in
       hl = theme.ansi.green;
       "hl+" = theme.ansi-bright.green;
       info = theme.ansi.green;
-      prompt = theme.accent;
-      pointer = theme.accent;
-      marker = theme.ansi-bright.green;
-      spinner = theme.accent;
+      prompt = theme.accent-yellow;
+      pointer = theme.accent-yellow;
+      marker = theme.accent-yellow-bright;
+      spinner = theme.accent-yellow;
       scrollbar = theme.accent;
       header = theme.muted;
       border = theme.accent;
-      label = theme.accent;
+      label = theme.accent-yellow;
       query = theme.fg-bright;
       disabled = theme.muted-alt;
       gutter = theme.bg;

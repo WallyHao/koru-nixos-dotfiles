@@ -17,9 +17,9 @@
       inputbar-fg = theme.fg-bright;
       completion-bg = theme.bg-alt;
       completion-fg = theme.fg;
-      completion-highlight-bg = theme.accent;
+      completion-highlight-bg = theme.accent-yellow;
       completion-highlight-fg = theme.black;
-      highlight-color = theme.accent;
+      highlight-color = theme.accent-yellow;
       highlight-active-color = theme.accent-bright;
       # Copying a selection should reach other apps (Wayland clipboard).
       selection-clipboard = "clipboard";

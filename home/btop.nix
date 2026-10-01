@@ -23,11 +23,11 @@
       # Main text color
       theme[main_fg]="${theme.fg}"
 
-      # Title color for boxes (green accent)
-      theme[title]="${theme.ansi-bright.green}"
+      # Title color for boxes (soft yellow accent)
+      theme[title]="${theme.accent-yellow}"
 
       # Highlight color for keyboard shortcuts
-      theme[hi_fg]="${theme.accent}"
+      theme[hi_fg]="${theme.accent-yellow-bright}"
 
       # Background color of selected item in processes box
       theme[selected_bg]="${theme.bg-alt}"
