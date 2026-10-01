@@ -36,6 +36,16 @@ lib.filterAttrs
       spawn-sh = "imv \"$HOME/Pictures\"";
     };
 
+    # Toggle once per key press, including while stopping an active clicker.
+    "${modifier}+c" = {
+      _props.repeat = false;
+      spawn = [
+        "koru"
+        "click"
+        "toggle"
+      ];
+    };
+
     # Window control
     "${modifier}+q" = {
       close-window = { };

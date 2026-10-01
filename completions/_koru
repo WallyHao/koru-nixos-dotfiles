@@ -1,11 +1,17 @@
 #compdef koru
 
 _koru() {
+  if [[ $words[2] == click ]]; then
+    _arguments '2:action:(toggle start stop status)' \
+      '--frequency=[clicks per second]:frequency:' \
+      '(-h --help)'{-h,--help}'[show help]'
+    return
+  fi
   local context state line
   typeset -A opt_args
   _arguments -C \
     '(-h --help)'{-h,--help}'[show help]' \
-    '1:group:(system home profile proxy store)' \
+    '1:group:(system home profile proxy store click)' \
     '2:action:->action' \
     '*::options:->options'
   case $state in

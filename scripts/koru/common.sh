@@ -80,6 +80,11 @@ koru_help() {
       koru_line value '  status / list / refresh'
       koru_line value '  start / stop / autostart'
     fi
+    if [[ -z $group ]]; then
+      koru_line label 'click'
+      koru_line value '  --frequency N  Set clicks per second (default 100)'
+      koru_line value '  toggle / start / stop / status'
+    fi
     if [[ -z $group || $group == store ]]; then
       koru_line label 'store'
       koru_line value '  status / gc'

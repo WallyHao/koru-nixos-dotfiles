@@ -29,6 +29,7 @@ in
   imports = [
     ./niri/application-launcher.nix
     ./niri/idle-dimming.nix
+    ./niri/auto-click.nix
   ];
 
   # The frecency launcher is a hard dependency of this config, so it ships with
