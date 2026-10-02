@@ -6,7 +6,11 @@ script_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/koru/common.sh"
 koru_init
 
-# Click has options directly after its name, unlike the maintenance groups.
+# Utility commands take their own arguments, unlike the maintenance groups.
+if [[ ${1:-} == file ]]; then
+  shift
+  exec python3 "$script_dir/koru/file.py" "$@"
+fi
 if [[ ${1:-} == click ]]; then
   shift
   exec python3 "$script_dir/koru/click.py" "$@"

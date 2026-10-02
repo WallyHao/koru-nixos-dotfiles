@@ -81,6 +81,9 @@ koru_help() {
       koru_line value '  start / stop / autostart'
     fi
     if [[ -z $group ]]; then
+      koru_line label 'file'
+      koru_line value '  PATH      Share one file via a LAN download QR code'
+      koru_line value '  --host IP / --port PORT  (default port 8080)'
       koru_line label 'click'
       koru_line value '  --frequency N  Set clicks per second (default 100)'
       koru_line value '  toggle / start / stop / status'

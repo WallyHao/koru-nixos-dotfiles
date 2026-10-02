@@ -371,6 +371,24 @@ koru home validate
 After changing a switch, run `koru home build` or `koru system build` to apply it. Commands for proxy
 management and store cleanup are listed by `koru --help`.
 
+Share a video or any other single file with a phone on the same LAN:
+
+```sh
+koru file ~/Videos/Recordings/video.mp4
+koru file "./文件名 带空格.mp4"
+koru file ./video.mp4 --host 192.168.1.10
+```
+
+The command prints a terminal QR code and download URL. Scan it with your phone's camera
+and open the link in its browser to download. Keep the terminal open until the download
+finishes, then press `Ctrl+C` to stop sharing. Only the selected file is served through a
+random link; directories are not exposed. Large files stream without loading into memory,
+and HTTP byte ranges support resumed downloads. Do not modify the file while sharing it.
+The default TCP port is `8080`, already allowed by the system firewall. If it is occupied,
+stop the other server or use `--port PORT` and allow that port in the firewall. Automatic
+address detection prefers physical Wi-Fi/Ethernet interfaces over proxy tunnels; use
+`--host IP` to choose another LAN address. Wi-Fi client isolation can prevent phone access.
+
 Adding a user module means adding both `home/<software>.nix` and a matching switch in
 `modules-enables.nix`, and registering dependencies when needed, or evaluation fails. A system
 module is imported explicitly in `system/default.nix`.

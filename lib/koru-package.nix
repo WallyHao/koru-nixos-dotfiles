@@ -23,11 +23,13 @@ let
       gnugrep
       gnused
       home-manager
+      iproute2
       jq
       nix
       nixos-rebuild
       nixfmt
       python3
+      qrencode
       systemd
       util-linux
     ];

@@ -1,6 +1,13 @@
 #compdef koru
 
 _koru() {
+  if [[ $words[2] == file ]]; then
+    _arguments '2:file:_files' \
+      '--host=[LAN IPv4 address]:address:' \
+      '--port=[listen port (default 8080)]:port:' \
+      '(-h --help)'{-h,--help}'[show help]'
+    return
+  fi
   if [[ $words[2] == click ]]; then
     _arguments '2:action:(toggle start stop status)' \
       '--frequency=[clicks per second]:frequency:' \
@@ -11,7 +18,7 @@ _koru() {
   typeset -A opt_args
   _arguments -C \
     '(-h --help)'{-h,--help}'[show help]' \
-    '1:group:(system home profile proxy store click)' \
+    '1:group:(system home profile proxy store click file)' \
     '2:action:->action' \
     '*::options:->options'
   case $state in
